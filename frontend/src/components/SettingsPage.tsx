@@ -1,0 +1,284 @@
+import { useEffect, useState } from 'react'
+import DirectoryPicker from './settings/DirectoryPicker'
+import { useLanguage } from '../i18n/LanguageContext'
+import type { SystemHealth } from '../hooks/useSystemHealth'
+import ApiConfigList from './settings/ApiConfigList'
+
+interface Config {
+  data_dir: string
+  analysis_dir: string
+  pixi_path: string
+  active_llm_config_id: string | null
+}
+
+interface UserProfile {
+  research_domain: string | null
+  experience_level: string | null
+  language_preference: string | null
+  communication_style: string | null
+  notes: string | null
+}
+
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+function SettingSection({
+  title,
+  description,
+  children,
+  saveState,
+  saveError,
+  onSave,
+}: {
+  title: string
+  description: string
+  children: React.ReactNode
+  saveState: SaveState
+  saveError?: string | null
+  onSave: () => void
+}) {
+  const { t } = useLanguage()
+  return (
+    <div className="bg-surface-raised rounded-xl p-6">
+      <div className="mb-5">
+        <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
+        <p className="text-xs text-text-muted mt-1">{description}</p>
+      </div>
+      <div className="space-y-4">
+        {children}
+      </div>
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          onClick={onSave}
+          disabled={saveState === 'saving'}
+          className="px-4 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-medium disabled:opacity-50 transition-colors"
+        >
+          {saveState === 'saving' ? t('settings_saving') : t('settings_save')}
+        </button>
+        {saveState === 'saved' && (
+          <span className="text-xs text-emerald-400">✓ {t('settings_saved')}</span>
+        )}
+        {saveState === 'error' && saveError && (
+          <span className="text-xs text-red-400">{saveError}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FieldRow({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <label className="text-xs text-text-muted mb-1 block">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+const inputCls = 'w-full bg-surface-overlay border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent placeholder-text-muted'
+const selectCls = 'w-full bg-surface-overlay border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent'
+
+export default function SettingsPage() {
+  const { t } = useLanguage()
+  const [config, setConfig] = useState<Config | null>(null)
+  const [dataDir, setDataDir] = useState('')
+  const [analysisDir, setAnalysisDir] = useState('')
+  const [pixiPath, setPixiPath] = useState('')
+  const [activeConfigId, setActiveConfigId] = useState<string | null>(null)
+
+  const [workspaceState, setWorkspaceState] = useState<SaveState>('idle')
+  const [profileState, setProfileState] = useState<SaveState>('idle')
+
+  const [profile, setProfile] = useState<UserProfile>({
+    research_domain: null, experience_level: null,
+    language_preference: null, communication_style: null, notes: null,
+  })
+  const [llmHealth, setLlmHealth] = useState<SystemHealth | null>(null)
+
+  useEffect(() => {
+    fetch('/api/config/')
+      .then((r) => r.json())
+      .then((cfg: Config) => {
+        setConfig(cfg)
+        setDataDir(cfg.data_dir)
+        setAnalysisDir(cfg.analysis_dir)
+        setPixiPath(cfg.pixi_path)
+        setActiveConfigId(cfg.active_llm_config_id)
+      })
+      .catch(() => {})
+
+    fetch('/api/profile')
+      .then((r) => r.json())
+      .then((p: UserProfile) => setProfile(p))
+      .catch(() => {})
+
+    fetch('/api/system/health')
+      .then((r) => r.json())
+      .then((h: SystemHealth) => setLlmHealth(h))
+      .catch(() => {})
+  }, [])
+
+  const saveWorkspace = async () => {
+    setWorkspaceState('saving')
+    try {
+      const res = await fetch('/api/config/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data_dir: dataDir, analysis_dir: analysisDir }),
+      }).then((r) => r.json())
+      if (res.ok) {
+        setWorkspaceState('saved')
+        setTimeout(() => setWorkspaceState('idle'), 2000)
+      } else {
+        setWorkspaceState('error')
+      }
+    } catch {
+      setWorkspaceState('error')
+    }
+  }
+
+  const saveProfile = async () => {
+    setProfileState('saving')
+    await fetch('/api/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    }).catch(() => {})
+    setProfileState('saved')
+    setTimeout(() => setProfileState('idle'), 2000)
+  }
+
+  const saveDiagnostics = async () => {
+    await fetch('/api/config/', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pixi_path: pixiPath }),
+    }).catch(() => {})
+  }
+  const [diagState, setDiagState] = useState<SaveState>('idle')
+  const handleSaveDiag = async () => {
+    setDiagState('saving')
+    await saveDiagnostics()
+    setDiagState('saved')
+    setTimeout(() => setDiagState('idle'), 2000)
+  }
+
+  if (!config) {
+    return <div className="p-8 text-text-muted text-sm">{t('settings_loading')}</div>
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto p-8 space-y-5">
+      <h1 className="text-xl font-semibold text-text-primary">{t('settings_title')}</h1>
+
+      {/* Workspace */}
+      <SettingSection
+        title={t('settings_workspace')}
+        description={t('settings_workspace_desc')}
+        saveState={workspaceState}
+        onSave={saveWorkspace}
+      >
+        <FieldRow label={t('settings_data_dir')}>
+          <DirectoryPicker label="" value={dataDir} onChange={setDataDir} />
+        </FieldRow>
+        <FieldRow label={t('settings_analysis_dir')}>
+          <DirectoryPicker label="" value={analysisDir} onChange={setAnalysisDir} />
+        </FieldRow>
+      </SettingSection>
+
+      {/* AI Models — multi-config list */}
+      <div className="bg-surface-raised rounded-xl p-6">
+        <div className="mb-5">
+          <h2 className="text-sm font-semibold text-text-primary">{t('api_config_title')}</h2>
+          <p className="text-xs text-text-muted mt-1">{t('api_config_desc')}</p>
+        </div>
+        <ApiConfigList
+          activeConfigId={activeConfigId}
+          onActiveChanged={setActiveConfigId}
+        />
+      </div>
+
+      {/* Researcher Profile */}
+      <SettingSection
+        title={t('settings_profile')}
+        description={t('settings_profile_desc')}
+        saveState={profileState}
+        onSave={saveProfile}
+      >
+        <FieldRow label={t('settings_research_domain')}>
+          <input
+            type="text"
+            value={profile.research_domain ?? ''}
+            onChange={(e) => setProfile((p) => ({ ...p, research_domain: e.target.value || null }))}
+            placeholder={t('settings_research_domain_placeholder')}
+            className={inputCls}
+          />
+        </FieldRow>
+        <FieldRow label={t('settings_experience_level')}>
+          <select
+            value={profile.experience_level ?? ''}
+            onChange={(e) => setProfile((p) => ({ ...p, experience_level: e.target.value || null }))}
+            className={selectCls}
+          >
+            <option value="">{t('settings_not_set')}</option>
+            <option value="novice">{t('settings_novice')}</option>
+            <option value="intermediate">{t('settings_intermediate')}</option>
+            <option value="expert">{t('settings_expert')}</option>
+          </select>
+        </FieldRow>
+        <FieldRow label={t('settings_comm_style')}>
+          <select
+            value={profile.communication_style ?? ''}
+            onChange={(e) => setProfile((p) => ({ ...p, communication_style: e.target.value || null }))}
+            className={selectCls}
+          >
+            <option value="">{t('settings_not_set')}</option>
+            <option value="brief">{t('settings_brief')}</option>
+            <option value="detailed">{t('settings_detailed')}</option>
+          </select>
+        </FieldRow>
+        <FieldRow label={t('settings_notes')}>
+          <textarea
+            value={profile.notes ?? ''}
+            onChange={(e) => setProfile((p) => ({ ...p, notes: e.target.value || null }))}
+            rows={3}
+            placeholder={t('settings_notes_placeholder')}
+            className={`${inputCls} resize-none`}
+          />
+        </FieldRow>
+      </SettingSection>
+
+      {/* Diagnostics */}
+      <SettingSection
+        title={t('settings_diagnostics')}
+        description={t('settings_diagnostics_desc')}
+        saveState={diagState}
+        onSave={handleSaveDiag}
+      >
+        <FieldRow label={t('settings_pixi_path')}>
+          <input
+            type="text"
+            value={pixiPath}
+            onChange={(e) => setPixiPath(e.target.value)}
+            className={`${inputCls} font-mono`}
+          />
+        </FieldRow>
+        <FieldRow label={t('settings_llm_connectivity')}>
+          {llmHealth ? (
+            <div className={`flex items-center gap-2 text-sm ${llmHealth.llm_reachable ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span className={`w-2 h-2 rounded-full ${llmHealth.llm_reachable ? 'bg-emerald-400' : 'bg-red-400'}`} />
+              {llmHealth.llm_reachable ? t('settings_connected') : `${t('settings_unreachable')}${llmHealth.llm_error ? ` — ${llmHealth.llm_error}` : ''}`}
+            </div>
+          ) : (
+            <span className="text-text-muted text-sm">{t('settings_checking')}</span>
+          )}
+        </FieldRow>
+      </SettingSection>
+    </div>
+  )
+}

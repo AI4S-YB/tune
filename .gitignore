@@ -1,0 +1,45 @@
+# Local analysis data and runtime state
+analysis/
+.run/
+
+# Internal planning / local assistant context
+openspec/
+frontend/openspec/
+.claude/
+CLAUDE.md
+
+# Private / non-public test code
+tests/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Env / local config
+.env
+.env.*
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Patch / merge leftovers
+*.orig
+*.rej
+
+# Frontend test code
+frontend/src/**/*.test.tsx
+frontend/src/test/

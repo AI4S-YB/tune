@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --surface-base: #0c0f17;
+    --surface-raised: #141825;
+    --surface-overlay: #1a2030;
+    --surface-hover: #1e2540;
+    --accent: #6366f1;
+    --background: 12 15 23;
+    --foreground: 232 234 242;
+    --border: 255 255 255 / 0.07;
+    --input: 26 32 48;
+    --ring: 99 102 241;
+    --radius: 0.75rem;
+  }
+}
+
+body {
+  @apply bg-surface-base text-text-primary font-sans;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scoped markdown styles for assistant chat bubbles */
+.prose-chat {
+  color: #e8eaf2;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.prose-chat h1, .prose-chat h2, .prose-chat h3 {
+  color: #f0f2f6;
+  font-weight: 600;
+  margin: 0.75em 0 0.4em;
+}
+.prose-chat h1 { font-size: 1.1em; }
+.prose-chat h2 { font-size: 1em; }
+.prose-chat h3 { font-size: 0.95em; }
+.prose-chat p { margin: 0.4em 0; }
+.prose-chat ul, .prose-chat ol { margin: 0.4em 0; padding-left: 1.4em; }
+.prose-chat li { margin: 0.15em 0; }
+.prose-chat strong { color: #f0f2f6; font-weight: 600; }
+.prose-chat em { color: #b8c0cc; }
+.prose-chat code {
+  background: #1a2030;
+  color: #a5b4fc;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+.prose-chat pre {
+  background: #141825;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 0.75em 1em;
+  margin: 0.6em 0;
+  overflow-x: auto;
+}
+.prose-chat pre code {
+  background: transparent;
+  color: #e8eaf2;
+  padding: 0;
+  font-size: 0.8em;
+}
+.prose-chat table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.6em 0;
+  font-size: 0.85em;
+}
+.prose-chat th, .prose-chat td {
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+.prose-chat th { background: #1a2030; color: #f0f2f6; }
+.prose-chat blockquote {
+  border-left: 3px solid #6366f1;
+  margin: 0.5em 0;
+  padding: 0.1em 0.75em;
+  color: #8d96a8;
+}
+.prose-chat a { color: #818cf8; text-decoration: underline; }

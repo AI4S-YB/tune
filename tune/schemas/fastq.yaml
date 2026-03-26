@@ -1,0 +1,48 @@
+file_types: [fastq, fq]
+label: "FASTQ Sequencing Data"
+
+base_fields:
+  - key: project
+    label: "Project"
+    required: true
+    type: string
+  - key: sample_id
+    label: "Sample ID"
+    required: true
+    type: string
+  - key: sample_type
+    label: "Sample Type (tissue / cell line / blood / other)"
+    required: true
+    type: string
+  - key: experiment_type
+    label: "Experiment Type"
+    required: true
+    type: string
+    hint: "e.g. RNA-seq, ChIP-seq, WGS, WES"
+  - key: operator
+    label: "Operator / Who processed this"
+    required: false
+    type: string
+  - key: notes
+    label: "Notes"
+    required: false
+    type: string
+
+type_fields:
+  - key: sequencing_platform
+    label: "Sequencing Platform"
+    required: true
+    type: choice
+    choices: [Illumina, PacBio, Oxford Nanopore, BGI, other]
+  - key: paired_end
+    label: "Paired-end sequencing?"
+    required: true
+    type: boolean
+  - key: read_length
+    label: "Read length (bp)"
+    required: false
+    type: integer
+  - key: library_prep_kit
+    label: "Library preparation kit"
+    required: false
+    type: string

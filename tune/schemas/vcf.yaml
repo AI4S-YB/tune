@@ -1,0 +1,50 @@
+file_types: [vcf, bcf]
+label: "Variant Call File (VCF/BCF)"
+
+base_fields:
+  - key: project
+    label: "Project"
+    required: true
+    type: string
+  - key: sample_id
+    label: "Sample ID"
+    required: true
+    type: string
+  - key: sample_type
+    label: "Sample Type"
+    required: true
+    type: string
+  - key: experiment_type
+    label: "Experiment Type"
+    required: true
+    type: string
+  - key: operator
+    label: "Operator"
+    required: false
+    type: string
+  - key: notes
+    label: "Notes"
+    required: false
+    type: string
+
+type_fields:
+  - key: reference_genome
+    label: "Reference genome version"
+    required: true
+    type: string
+    hint: "e.g. hg38, GRCh38"
+  - key: variant_caller
+    label: "Variant caller used"
+    required: true
+    type: choice
+    choices: [GATK HaplotypeCaller, DeepVariant, Strelka2, MuTect2, FreeBayes, other]
+  - key: filter_criteria
+    label: "Filtering criteria applied"
+    required: false
+    type: string
+    hint: "e.g. PASS only, QUAL>30"
+  - key: variant_type
+    label: "Variant type"
+    required: false
+    type: choice
+    choices: [SNV, indel, SNV+indel, CNV, SV, other]

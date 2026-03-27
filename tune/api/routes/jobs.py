@@ -1150,6 +1150,7 @@ def _summarize_resource_graph_snapshot(raw_graph: str | dict | None) -> dict:
 
 
 def _build_incident_memory_query(job: AnalysisJob, incident: dict, current_step=None) -> str:
+    env_failure = _extract_environment_failure_signal(incident)
     parts = [
         str(incident.get("incident_type") or "").strip(),
         str(incident.get("summary") or "").strip(),
@@ -1164,6 +1165,18 @@ def _build_incident_memory_query(job: AnalysisJob, incident: dict, current_step=
             or ""
         ).strip(),
     ]
+    if env_failure is not None:
+        parts.append(str(env_failure.get("failure_kind") or "").strip())
+        parts.extend(
+            str(pkg).strip()
+            for pkg in (env_failure.get("failed_packages") or [])
+            if str(pkg).strip()
+        )
+        parts.extend(
+            str(item.get("step_key") or "").strip()
+            for item in (env_failure.get("implicated_steps") or [])
+            if isinstance(item, dict) and str(item.get("step_key") or "").strip()
+        )
     return " ".join(item for item in parts if item)
 
 

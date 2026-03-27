@@ -607,6 +607,32 @@ def _extract_environment_failure_signal(incident: dict) -> dict | None:
     return None
 
 
+def _build_environment_failure_memory_fragment(incident: dict) -> str | None:
+    env_failure = _extract_environment_failure_signal(incident)
+    if env_failure is None:
+        return None
+
+    parts: list[str] = []
+    failure_kind = str(env_failure.get("failure_kind") or "").strip()
+    if failure_kind:
+        parts.append(f"env_failure={failure_kind}")
+    failed_packages = [
+        str(pkg).strip()
+        for pkg in (env_failure.get("failed_packages") or [])
+        if str(pkg).strip()
+    ]
+    if failed_packages:
+        parts.append("env_packages=" + ",".join(failed_packages))
+    implicated_steps = [
+        str(item.get("step_key") or "").strip()
+        for item in (env_failure.get("implicated_steps") or [])
+        if isinstance(item, dict) and str(item.get("step_key") or "").strip()
+    ]
+    if implicated_steps:
+        parts.append("env_steps=" + ",".join(implicated_steps[:3]))
+    return "; ".join(parts) if parts else None
+
+
 def _build_safe_action_eligibility(incident: dict) -> dict | None:
     incident_type = str(incident.get("incident_type") or "").strip()
     if incident_type != "resume_failed":
@@ -1745,6 +1771,9 @@ async def _record_supervisor_resolution_event(
     ]
     if detail:
         resolution_parts.append(detail)
+    env_fragment = _build_environment_failure_memory_fragment(incident)
+    if env_fragment:
+        resolution_parts.append(env_fragment)
 
     try:
         from tune.core.memory.project_memory import write_execution_event

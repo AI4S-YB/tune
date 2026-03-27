@@ -237,6 +237,19 @@ export default function SettingsPage() {
             }}
           />
         </FieldRow>
+        <div className="rounded-lg border border-border-subtle bg-surface-overlay px-4 py-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+            {t('settings_workspace_layout')}
+          </div>
+          <div className="mt-2 space-y-1 text-xs font-mono text-text-primary break-all">
+            <div>{workspaceRoot || '…'}/.tune</div>
+            <div>{workspaceRoot || '…'}/data</div>
+            <div>{workspaceRoot || '…'}/workspace</div>
+          </div>
+          <div className="mt-2 text-xs text-text-muted">
+            {t('settings_workspace_layout_hint')}
+          </div>
+        </div>
         <FieldRow label={t('settings_data_dir')}>
           <div className="bg-surface-overlay rounded p-3 text-sm text-white font-mono break-all">
             {dataDir || <span className="text-text-muted">—</span>}

@@ -706,6 +706,25 @@ def _build_safe_action_eligibility(incident: dict) -> dict | None:
     }
 
 
+def _describe_resume_retry_blockers(
+    eligibility: dict | None,
+    *,
+    job_status: str,
+) -> list[str]:
+    blockers: list[str] = []
+    if not eligibility:
+        return blockers
+    if "job_status_not_retryable" in (eligibility.get("blocking_reasons") or []):
+        blockers.append(f"the job is in non-retryable status '{job_status}'")
+    if "pending_request_reference_missing" in (eligibility.get("blocking_reasons") or []):
+        blockers.append("no pending authorization/repair reference is still attached")
+    if "resolved_pending_signal_missing" in (eligibility.get("blocking_reasons") or []):
+        blockers.append("no resolved pending-decision signal is present")
+    if "pending_request_type_mismatch" in (eligibility.get("blocking_reasons") or []):
+        blockers.append("the resolved decision type does not match the remaining pending request reference")
+    return blockers
+
+
 def _infer_safe_supervisor_action(incident: dict, rollback_level: str) -> str | None:
     if incident.get("incident_type") == "plan_confirmation" and rollback_level == "abstract_plan":
         return "revalidate_abstract_plan"
@@ -822,16 +841,7 @@ def _build_safe_action_note(
             f"reference are still attached, and the job remains in a retryable paused state ({job_status})."
         )
     if incident_type == "resume_failed" and safe_action is None:
-        blockers: list[str] = []
-        if eligibility:
-            if "job_status_not_retryable" in (eligibility.get("blocking_reasons") or []):
-                blockers.append(f"the job is in non-retryable status '{job_status}'")
-            if "pending_request_reference_missing" in (eligibility.get("blocking_reasons") or []):
-                blockers.append("no pending authorization/repair reference is still attached")
-            if "resolved_pending_signal_missing" in (eligibility.get("blocking_reasons") or []):
-                blockers.append("no resolved pending-decision signal is present")
-            if "pending_request_type_mismatch" in (eligibility.get("blocking_reasons") or []):
-                blockers.append("the resolved decision type does not match the remaining pending request reference")
+        blockers = _describe_resume_retry_blockers(eligibility, job_status=job_status)
         blocker_text = "; ".join(blockers) if blockers else (
             f"the job is no longer in a retryable paused state ({job_status})"
         )
@@ -1260,6 +1270,9 @@ def _build_historical_guidance(
     similar_resolutions: list[dict] | None,
     *,
     safe_action: str | None,
+    safe_action_eligibility: dict | None = None,
+    incident_type: str | None = None,
+    job_status: str | None = None,
 ) -> str | None:
     historical_policy = _build_historical_policy(
         similar_resolutions,
@@ -1286,6 +1299,23 @@ def _build_historical_guidance(
             return (
                 f"Project memory most often resolved similar incidents via {preferred_safe_action} "
                 f"({support_count}/{total_matches}); current recommendation is {current_safe_action}."
+            )
+        if (
+            not current_safe_action
+            and str(incident_type or "").strip() == "resume_failed"
+            and safe_action_eligibility
+            and safe_action_eligibility.get("blocking_reasons")
+        ):
+            blocker_text = "; ".join(
+                _describe_resume_retry_blockers(
+                    safe_action_eligibility,
+                    job_status=str(job_status or "unknown").strip() or "unknown",
+                )
+            ) or "the current retry eligibility checks are blocked"
+            return (
+                f"Project memory most often resolved similar incidents via {preferred_safe_action} "
+                f"({support_count}/{total_matches}), but the current recommendation intentionally withholds "
+                f"that path because {blocker_text}."
             )
         return (
             f"Project memory most often resolved similar incidents via {preferred_safe_action} "
@@ -3077,6 +3107,9 @@ def _build_supervisor_review_fallback(
         historical_guidance = _build_historical_guidance(
             (dossier or {}).get("similar_resolutions") or [],
             safe_action=safe_action,
+            safe_action_eligibility=safe_action_eligibility,
+            incident_type=incident.get("incident_type"),
+            job_status=incident.get("job_status"),
         )
         recommended_action_confidence, recommended_action_basis = _build_recommended_action_confidence(
             safe_action=safe_action,

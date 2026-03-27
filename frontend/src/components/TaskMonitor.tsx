@@ -26,6 +26,8 @@ interface SupervisorRecommendation {
     retryable_job_statuses?: string[] | null
     has_resolved_pending_signal?: boolean
     has_pending_request_reference?: boolean
+    resolved_pending_types?: string[] | null
+    pending_reference_types?: string[] | null
     blocking_reasons?: string[] | null
   } | null
   historical_policy?: {
@@ -2582,6 +2584,14 @@ export default function TaskMonitor({
                                 <div>
                                   {t('tasks_supervisor_eligibility_pending_reference')}{' '}
                                   {formatEligibilityBool(rec.safe_action_eligibility.has_pending_request_reference, t)}
+                                </div>
+                                <div>
+                                  {t('tasks_supervisor_eligibility_resolved_types')}{' '}
+                                  {(rec.safe_action_eligibility.resolved_pending_types || []).join(', ') || 'none'}
+                                </div>
+                                <div>
+                                  {t('tasks_supervisor_eligibility_pending_types')}{' '}
+                                  {(rec.safe_action_eligibility.pending_reference_types || []).join(', ') || 'none'}
                                 </div>
                                 {(rec.safe_action_eligibility.blocking_reasons || []).length > 0 && (
                                   <div>

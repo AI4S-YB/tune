@@ -470,6 +470,159 @@ describe('TaskMonitor', () => {
     })
   })
 
+  it('shows resolved and pending request types when resume retry is blocked by type mismatch', async () => {
+    mockUseProjectTaskFeed.mockReturnValue({
+      jobs: [
+        {
+          id: 'job-resume',
+          name: 'Resume auth chain',
+          status: 'waiting_for_authorization',
+          goal: 'Resume RNA-seq pipeline',
+          thread_id: 'thread-resume',
+          created_at: '2026-03-27T09:00:00Z',
+        },
+      ],
+      attentionSummary: {
+        signal: 'warning',
+        count: 1,
+        counts: {
+          running: 0,
+          authorization: 0,
+          repair: 0,
+          confirmation: 0,
+          clarification: 0,
+          warning: 1,
+          needs_input: 0,
+          needs_review: 1,
+        },
+        needs_input: [],
+        needs_review: [
+          {
+            key: 'job-resume:resume_failed',
+            job_id: 'job-resume',
+            job_name: 'Resume auth chain',
+            incident_type: 'resume_failed',
+            reason: 'warning',
+            age_seconds: 200,
+            summary: 'Resume chain stopped after a resolved decision.',
+            severity: 'warning',
+            owner: 'system',
+          },
+        ],
+        reminders: [],
+        auto_authorize_commands: false,
+      },
+      incidents: [
+        {
+          job_id: 'job-resume',
+          job_name: 'Resume auth chain',
+          job_status: 'waiting_for_authorization',
+          incident_type: 'resume_failed',
+          severity: 'warning',
+          owner: 'system',
+          summary: 'Resume chain stopped after a resolved decision.',
+          next_action: 'inspect_resume_chain',
+          age_seconds: 200,
+          thread_id: 'thread-resume',
+        },
+      ],
+      incidentSummary: { total_open: 1, critical: 0, warning: 1, info: 0 },
+      overview: { total: 1, active: 1, by_status: { waiting_for_authorization: 1 } },
+      eventVersion: 0,
+      totalCount: 1,
+      getJobsPage: () => [
+        {
+          id: 'job-resume',
+          name: 'Resume auth chain',
+          status: 'waiting_for_authorization',
+          goal: 'Resume RNA-seq pipeline',
+          thread_id: 'thread-resume',
+          created_at: '2026-03-27T09:00:00Z',
+        },
+      ],
+      getPageHasMore: () => false,
+      patchJob: vi.fn(),
+      locateJobPage: vi.fn().mockResolvedValue(1),
+      refreshJobPage: vi.fn().mockResolvedValue([
+        {
+          id: 'job-resume',
+          name: 'Resume auth chain',
+          status: 'waiting_for_authorization',
+          goal: 'Resume RNA-seq pipeline',
+          thread_id: 'thread-resume',
+          created_at: '2026-03-27T09:00:00Z',
+        },
+      ]),
+      refreshJobs: vi.fn().mockResolvedValue([]),
+      refreshAttentionSummary: vi.fn().mockResolvedValue(undefined),
+      refreshIncidents: vi.fn().mockResolvedValue(undefined),
+      refreshAll: vi.fn().mockResolvedValue(undefined),
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/jobs/supervisor-review?project=proj-1')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              mode: 'heuristic',
+              generated_at: '2026-03-27T12:00:00Z',
+              overview: '1 open incident.',
+              supervisor_message: 'Retry resume chain is blocked until the pending reference is reconciled.',
+              recommendations: [
+                {
+                  priority: 1,
+                  job_id: 'job-resume',
+                  job_name: 'Resume auth chain',
+                  incident_type: 'resume_failed',
+                  severity: 'warning',
+                  owner: 'system',
+                  diagnosis: 'The resolved decision type does not match the attached pending request.',
+                  immediate_action: 'inspect_resume_chain',
+                  why_now: 'Blind retry would apply the wrong decision chain.',
+                  rollback_target: 'resume_chain',
+                  safe_action: null,
+                  safe_action_note:
+                    'Resume-chain retry is withheld because the resolved decision type does not match the remaining pending request reference.',
+                  safe_action_eligibility: {
+                    eligible: false,
+                    current_job_status: 'waiting_for_authorization',
+                    retryable_job_statuses: ['interrupted', 'waiting_for_authorization', 'waiting_for_repair'],
+                    has_resolved_pending_signal: true,
+                    has_pending_request_reference: true,
+                    resolved_pending_types: ['repair'],
+                    pending_reference_types: ['authorization'],
+                    blocking_reasons: ['pending_request_type_mismatch'],
+                  },
+                },
+              ],
+              dossiers: [],
+            }),
+          })
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({}),
+        })
+      }),
+    )
+
+    renderTaskMonitor({
+      projectId: 'proj-1',
+      onOpenThread: vi.fn(),
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Supervisor Review' }))
+
+    expect(await screen.findByText('Resolved decision types: repair')).toBeInTheDocument()
+    expect(screen.getByText('Pending reference types: authorization')).toBeInTheDocument()
+    expect(
+      screen.getByText('Blockers: resolved decision type does not match pending request reference'),
+    ).toBeInTheDocument()
+  })
+
   it('surfaces pending command authorization at the top of the task panel with a scrollable command box', async () => {
     const refreshAll = vi.fn().mockResolvedValue(undefined)
     const refreshJobPage = vi.fn().mockResolvedValue([

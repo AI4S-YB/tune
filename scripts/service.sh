@@ -173,6 +173,69 @@ resolve_analysis_dir() {
   ANALYSIS_DIR="$(cd "$raw" && pwd)"
 }
 
+resolved_workspace_root() {
+  local candidate="${ANALYSIS_DIR:-}"
+  [[ -n "$candidate" ]] || return 0
+
+  if [[ -f "$candidate/.tune/config.yaml" ]]; then
+    echo "$candidate"
+    return 0
+  fi
+
+  if [[ -f "$candidate/workspace/.tune/config.yaml" ]]; then
+    echo "$candidate"
+    return 0
+  fi
+
+  if [[ "$(basename "$candidate")" == "workspace" ]]; then
+    local parent
+    parent="$(cd "$(dirname "$candidate")" && pwd)"
+    if [[ -f "$candidate/.tune/config.yaml" || -f "$parent/.tune/config.yaml" ]]; then
+      echo "$parent"
+      return 0
+    fi
+  fi
+}
+
+resolved_data_dir() {
+  local root
+  root="$(resolved_workspace_root)"
+  if [[ -n "$root" ]]; then
+    echo "$root/data"
+    return 0
+  fi
+}
+
+resolved_runtime_analysis_dir() {
+  local root
+  root="$(resolved_workspace_root)"
+  if [[ -n "$root" ]]; then
+    echo "$root/workspace"
+    return 0
+  fi
+  if [[ -n "${ANALYSIS_DIR:-}" ]]; then
+    echo "$ANALYSIS_DIR"
+  fi
+}
+
+print_workspace_status() {
+  local root data_dir runtime_dir
+  root="$(resolved_workspace_root)"
+  data_dir="$(resolved_data_dir)"
+  runtime_dir="$(resolved_runtime_analysis_dir)"
+
+  if [[ -n "$root" ]]; then
+    echo "Workspace: root=$root"
+    echo "Workspace: data_dir=$data_dir"
+    echo "Workspace: analysis_dir=$runtime_dir"
+    return 0
+  fi
+
+  if [[ -n "${ANALYSIS_DIR:-}" ]]; then
+    echo "Workspace: analysis_dir=$ANALYSIS_DIR"
+  fi
+}
+
 component_selected() {
   local component="$1"
   case "$TARGET" in
@@ -732,6 +795,7 @@ case "$COMMAND" in
   status)
     if component_selected backend; then
       status_component backend
+      print_workspace_status
     fi
     if component_selected frontend; then
       status_component frontend

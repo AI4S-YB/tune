@@ -1587,6 +1587,13 @@ def _build_supervisor_focus_summary(
     )
     top_recommendation = recs[0] if recs else {}
     top_safe_action = str(top_recommendation.get("safe_action") or "").strip() or None
+    top_job_id = str(top_recommendation.get("job_id") or "").strip()
+    dossier_by_job = {
+        str(item.get("job_id") or "").strip(): item
+        for item in dossiers
+        if str(item.get("job_id") or "").strip()
+    }
+    top_environment_failure = (dossier_by_job.get(top_job_id) or {}).get("environment_failure") or {}
 
     primary_lane = "operator_review"
     lane_reason = "No single dominant lane is established yet."
@@ -1615,6 +1622,12 @@ def _build_supervisor_focus_summary(
         lane_reason = resource_guidance["lane_reason"]
         next_best_operator_move = resource_guidance["next_move"]
         next_best_operator_reason = resource_guidance["next_reason"]
+    elif top_environment_failure:
+        environment_guidance = _build_environment_readiness_guidance(top_environment_failure)
+        primary_lane = "environment_readiness"
+        lane_reason = environment_guidance["lane_reason"]
+        next_best_operator_move = environment_guidance["next_move"]
+        next_best_operator_reason = environment_guidance["next_reason"]
     elif top_safe_action or auto_recoverable_total > 0:
         primary_lane = "runtime_recovery"
         lane_reason = "The current project is mainly in runtime recovery / normalization work."
@@ -1698,6 +1711,47 @@ def _build_resource_readiness_guidance(blocker_cause: str | None) -> dict[str, o
     }
 
 
+def _build_environment_readiness_guidance(environment_failure: dict | None) -> dict[str, object]:
+    env = environment_failure or {}
+    failure_kind = str(env.get("failure_kind") or "install_failed").strip()
+    failed_packages = [
+        str(pkg).strip()
+        for pkg in (env.get("failed_packages") or [])
+        if str(pkg).strip()
+    ]
+    package_fragment = ""
+    if failed_packages:
+        package_fragment = f" for package(s) {', '.join(failed_packages[:3])}"
+
+    if failure_kind == "missing_package":
+        return {
+            "lane_reason": "Environment readiness is dominated by missing or mismatched runtime packages.",
+            "next_move": "inspect_environment_failure",
+            "next_reason": (
+                "Inspect the failed package mapping, candidate aliases, and implicated step requirements"
+                f"{package_fragment} before retrying environment preparation."
+            ),
+            "step_codes": [
+                "open_task",
+                "inspect_environment_failure",
+                "recheck_task_state",
+            ],
+        }
+    return {
+        "lane_reason": "Environment readiness is dominated by runtime environment install failure.",
+        "next_move": "inspect_environment_failure",
+        "next_reason": (
+            "Inspect the environment preparation diagnostics, install output, and implicated step packages"
+            f"{package_fragment} before retrying execution."
+        ),
+        "step_codes": [
+            "open_task",
+            "inspect_environment_failure",
+            "recheck_task_state",
+        ],
+    }
+
+
 def _build_project_playbook(
     focus_summary: dict | None,
     recommendations: list[dict] | None = None,
@@ -1731,6 +1785,12 @@ def _build_project_playbook(
         step_codes.extend([
             "open_chat",
             "provide_missing_resource_clarification",
+            "recheck_task_state",
+        ])
+    elif move == "inspect_environment_failure":
+        step_codes.extend([
+            "open_task",
+            "inspect_environment_failure",
             "recheck_task_state",
         ])
     elif move in {

@@ -240,6 +240,13 @@ describe('TaskMonitor', () => {
                   package_candidates: {
                     featureCounts: ['subread', 'featurecounts'],
                   },
+                  implicated_steps: [
+                    {
+                      step_key: 'featurecounts_quant',
+                      step_type: 'quant.featurecounts',
+                      display_name: 'featureCounts quantification',
+                    },
+                  ],
                 },
               ],
               auto_recovery_events: [],
@@ -268,7 +275,7 @@ describe('TaskMonitor', () => {
     expect(await screen.findByText('Runtime Diagnostics')).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Environment preparation failed: stage=pixi_install · packages=featureCounts · candidates=featureCounts -> subread, featurecounts',
+        'Environment preparation failed: stage=pixi_install · packages=featureCounts · candidates=featureCounts -> subread, featurecounts · steps=featureCounts quantification',
       ),
     ).toBeInTheDocument()
   })

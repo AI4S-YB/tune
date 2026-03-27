@@ -75,6 +75,13 @@ interface RuntimeDiagnostic {
   retryable?: boolean | null
   failed_packages?: string[] | null
   package_candidates?: Record<string, string[] | null> | null
+  implicated_steps?: Array<{
+    step_key?: string | null
+    step_type?: string | null
+    display_name?: string | null
+    packages?: string[] | null
+    matched_failed_packages?: string[] | null
+  }> | null
 }
 
 interface AutoRecoveryEvent {
@@ -275,6 +282,12 @@ function formatRuntimeDiagnostic(item: RuntimeDiagnostic, t: (k: TranslationKey)
       .filter(Boolean) as string[]
     if (candidateEntries.length > 0) {
       detailParts.push(`candidates=${candidateEntries.join('; ')}`)
+    }
+    const implicatedSteps = (item.implicated_steps ?? [])
+      .map((step) => step.display_name || step.step_key || '')
+      .filter(Boolean)
+    if (implicatedSteps.length > 0) {
+      detailParts.push(`steps=${implicatedSteps.join(', ')}`)
     }
     return detailParts.length > 0 ? `${label}: ${detailParts.join(' · ')}` : label
   }

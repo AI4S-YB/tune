@@ -13,6 +13,7 @@ import { ProjectTaskFeedProvider, useProjectTaskFeed } from './hooks/useProjectT
 import { useWebSocket } from './hooks/useWebSocket'
 import { useSystemHealth } from './hooks/useSystemHealth'
 import { useLanguage } from './i18n/LanguageContext'
+import type { TaskAttentionSignal } from './lib/taskAttention'
 
 type ActivePanel = 'data' | 'tasks' | 'skills' | 'settings' | null
 type ActiveView = 'home' | 'chat' | 'data' | 'tasks' | 'skills' | 'settings'
@@ -31,22 +32,12 @@ interface Thread {
   updated_at: string
 }
 
-interface TaskAttentionReminder {
-  key: string
-  jobId: string
-  jobName: string
-  incidentType: string
-  ageSeconds: number
-}
-
 interface TaskTraySummaryItem {
   key: string
   label: string
   count: number
   tone: 'running' | 'attention' | 'warning'
 }
-
-type TaskTraySignal = 'idle' | 'running' | 'warning' | 'attention'
 
 const STORAGE_KEYS = {
   activeThread: 'tune_active_thread',
@@ -128,20 +119,20 @@ function TaskTrayHandle({
   summaryItems,
   onOpen,
 }: {
-  signal: TaskTraySignal
+  signal: TaskAttentionSignal
   count: number
   summaryItems: TaskTraySummaryItem[]
   onOpen: () => void
 }) {
   const { t } = useLanguage()
-  const labelMap: Record<TaskTraySignal, string> = {
+  const labelMap: Record<TaskAttentionSignal, string> = {
     idle: t('tasks_tray_idle'),
     running: t('tasks_tray_running'),
     warning: t('tasks_tray_warning'),
     attention: t('tasks_tray_attention'),
   }
 
-  const activeDotClass: Record<TaskTraySignal, string> = {
+  const activeDotClass: Record<TaskAttentionSignal, string> = {
     idle: 'bg-slate-500/60 shadow-none',
     running: 'bg-emerald-400 shadow-[0_0_14px_rgba(74,222,128,0.45)]',
     warning: 'bg-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.4)]',
@@ -258,82 +249,28 @@ function AppBody({
   clearResourceWorkspaceRequest,
 }: AppBodyProps) {
   const { t } = useLanguage()
-  const { overview: taskOverview, incidents: taskTrayIncidents } = useProjectTaskFeed()
-
-  const userAttentionIncidents = useMemo(
-    () => taskTrayIncidents.filter((incident) => (
-      ['authorization', 'repair', 'plan_confirmation', 'execution_confirmation', 'resource_clarification'].includes(incident.incident_type)
-    )),
-    [taskTrayIncidents],
-  )
-
-  const warningIncidents = useMemo(
-    () => taskTrayIncidents.filter((incident) => (
-      ['stalled', 'resume_failed', 'job_status_mismatch', 'orphan_pending_request', 'failed', 'interrupted', 'binding_required'].includes(incident.incident_type)
-    )),
-    [taskTrayIncidents],
-  )
-
-  const runningCount = taskOverview?.by_status?.running ?? 0
-
-  const taskTraySignal: TaskTraySignal = userAttentionIncidents.length > 0
-    ? 'attention'
-    : warningIncidents.length > 0
-      ? 'warning'
-      : runningCount > 0
-        ? 'running'
-        : 'idle'
-
-  const taskTrayCount = userAttentionIncidents.length > 0
-    ? userAttentionIncidents.length
-    : warningIncidents.length > 0
-      ? warningIncidents.length
-      : runningCount
-
-  const authorizationCount = taskOverview?.by_status?.waiting_for_authorization ?? 0
-  const repairCount = taskOverview?.by_status?.waiting_for_repair ?? 0
-
-  const otherAttentionCount = useMemo(
-    () => userAttentionIncidents.filter((incident) => !['authorization', 'repair'].includes(incident.incident_type)).length,
-    [userAttentionIncidents],
-  )
+  const { attentionSummary } = useProjectTaskFeed()
 
   const taskTraySummaryItems = useMemo<TaskTraySummaryItem[]>(() => {
     const items: TaskTraySummaryItem[] = []
-    if (runningCount > 0) {
-      items.push({ key: 'running', label: t('tasks_tray_metric_running'), count: runningCount, tone: 'running' })
+    if ((attentionSummary?.counts.running ?? 0) > 0) {
+      items.push({ key: 'running', label: t('tasks_tray_metric_running'), count: attentionSummary?.counts.running ?? 0, tone: 'running' })
     }
-    if (authorizationCount > 0) {
-      items.push({ key: 'authorization', label: t('tasks_tray_metric_authorization'), count: authorizationCount, tone: 'attention' })
+    if ((attentionSummary?.counts.authorization ?? 0) > 0) {
+      items.push({ key: 'authorization', label: t('tasks_tray_metric_authorization'), count: attentionSummary?.counts.authorization ?? 0, tone: 'attention' })
     }
-    if (repairCount > 0) {
-      items.push({ key: 'repair', label: t('tasks_tray_metric_repair'), count: repairCount, tone: 'attention' })
+    if ((attentionSummary?.counts.repair ?? 0) > 0) {
+      items.push({ key: 'repair', label: t('tasks_tray_metric_repair'), count: attentionSummary?.counts.repair ?? 0, tone: 'attention' })
     }
+    const otherAttentionCount = (attentionSummary?.counts.confirmation ?? 0) + (attentionSummary?.counts.clarification ?? 0)
     if (otherAttentionCount > 0) {
       items.push({ key: 'attention', label: t('tasks_tray_metric_attention'), count: otherAttentionCount, tone: 'attention' })
     }
-    if (items.length === 0 && warningIncidents.length > 0) {
-      items.push({ key: 'warning', label: t('tasks_tray_metric_warning'), count: warningIncidents.length, tone: 'warning' })
+    if ((attentionSummary?.counts.warning ?? 0) > 0) {
+      items.push({ key: 'warning', label: t('tasks_tray_metric_warning'), count: attentionSummary?.counts.warning ?? 0, tone: 'warning' })
     }
     return items.slice(0, 3)
-  }, [authorizationCount, otherAttentionCount, repairCount, runningCount, t, warningIncidents.length])
-
-  const taskAttentionReminders = useMemo<TaskAttentionReminder[]>(
-    () => (
-      activeView !== 'chat' || activePanel === 'tasks'
-        ? []
-        : userAttentionIncidents
-          .filter((incident) => (incident.age_seconds ?? 0) >= 120)
-          .map((incident) => ({
-            key: `${incident.job_id}:${incident.incident_type}`,
-            jobId: incident.job_id,
-            jobName: incident.job_name,
-            incidentType: incident.incident_type,
-            ageSeconds: incident.age_seconds ?? 0,
-          }))
-    ),
-    [activePanel, activeView, userAttentionIncidents],
-  )
+  }, [attentionSummary, t])
 
   const isSplit = activeView === 'chat' && activePanel !== null
 
@@ -403,12 +340,26 @@ function AppBody({
               onNavigateToSettings={() => setActiveView('settings')}
               onNavigateToData={() => setActiveView('data')}
               onOpenThreadDrawer={() => setThreadDrawerOpen(true)}
-              taskAttentionReminders={taskAttentionReminders}
+              taskAttentionReminders={
+                activeView === 'chat' && activePanel !== 'tasks'
+                  ? (attentionSummary?.reminders ?? []).map((item) => ({
+                    key: item.key,
+                    jobId: item.job_id,
+                    jobName: item.job_name,
+                    incidentType: item.incident_type,
+                    reason: item.reason,
+                    ageSeconds: item.age_seconds,
+                    summary: item.summary,
+                    severity: item.severity,
+                    owner: item.owner,
+                  }))
+                  : []
+              }
             />
             {activeView === 'chat' && activePanel !== 'tasks' && (
               <TaskTrayHandle
-                signal={taskTraySignal}
-                count={taskTrayCount}
+                signal={attentionSummary?.signal ?? 'idle'}
+                count={attentionSummary?.count ?? 0}
                 summaryItems={taskTraySummaryItems}
                 onOpen={() => setActivePanel('tasks')}
               />

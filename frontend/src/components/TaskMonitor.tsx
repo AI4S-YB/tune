@@ -304,6 +304,25 @@ function buildConfirmationLayers(
   ]
 }
 
+function formatAttentionReasonLabel(
+  reason: 'authorization' | 'repair' | 'confirmation' | 'clarification' | 'warning',
+  t: (key: TranslationKey) => string,
+): string {
+  switch (reason) {
+    case 'authorization':
+      return t('status_waiting_for_authorization')
+    case 'repair':
+      return t('status_waiting_for_repair')
+    case 'confirmation':
+      return t('status_awaiting_plan_confirmation')
+    case 'clarification':
+      return t('tasks_attention_reason_clarification')
+    case 'warning':
+    default:
+      return t('tasks_tray_warning')
+  }
+}
+
 interface BindingMatchMetadata {
   candidate_source?: string
   score?: number
@@ -1530,7 +1549,7 @@ export default function TaskMonitor({
     getJobsPage,
     getPageHasMore,
     incidents,
-    incidentSummary,
+    attentionSummary,
     locateJobPage,
     patchJob,
     refreshJobPage,
@@ -1557,17 +1576,72 @@ export default function TaskMonitor({
   const listRef = useRef<HTMLDivElement>(null)
   const projectEventRefreshTimerRef = useRef<number | null>(null)
   const jobs = getJobsPage(page) as Job[]
-  const pendingAuthorizationJobs = useMemo(
-    () => recentJobs.filter((job) => (
-      job.status === 'waiting_for_authorization' || job.pending_interaction_type === 'authorization'
-    )),
+  const recentJobsById = useMemo(
+    () => Object.fromEntries(recentJobs.map((job) => [job.id, job])),
     [recentJobs],
   )
-  const pendingRepairJobs = useMemo(
-    () => recentJobs.filter((job) => (
-      job.status === 'waiting_for_repair' || job.pending_interaction_type === 'repair'
-    )),
-    [recentJobs],
+  const incidentsByKey = useMemo(
+    () => Object.fromEntries(incidents.map((incident) => [`${incident.job_id}:${incident.incident_type}`, incident])),
+    [incidents],
+  )
+  const attentionNeedsInput = attentionSummary?.needs_input ?? []
+  const attentionNeedsReview = attentionSummary?.needs_review ?? []
+  const pendingAuthorizationEntries = useMemo(
+    () => attentionNeedsInput
+      .filter((item) => item.reason === 'authorization')
+      .map((item) => ({
+        item,
+        job: recentJobsById[item.job_id] ?? null,
+      })),
+    [attentionNeedsInput, recentJobsById],
+  )
+  const pendingRepairEntries = useMemo(
+    () => attentionNeedsInput
+      .filter((item) => item.reason === 'repair')
+      .map((item) => ({
+        item,
+        job: recentJobsById[item.job_id] ?? null,
+      })),
+    [attentionNeedsInput, recentJobsById],
+  )
+  const pendingOperatorEntries = useMemo(
+    () => attentionNeedsInput
+      .filter((item) => item.reason === 'confirmation' || item.reason === 'clarification')
+      .map((item) => ({
+        item,
+        job: recentJobsById[item.job_id] ?? null,
+        incident: incidentsByKey[`${item.job_id}:${item.incident_type}`],
+      })),
+    [attentionNeedsInput, incidentsByKey, recentJobsById],
+  )
+  const reviewEntries = useMemo(
+    () => attentionNeedsReview.map((item) => ({
+      item,
+      job: recentJobsById[item.job_id] ?? null,
+      incident: incidentsByKey[`${item.job_id}:${item.incident_type}`],
+    })),
+    [attentionNeedsReview, incidentsByKey, recentJobsById],
+  )
+  const autoAuthorizeCommands = attentionSummary?.auto_authorize_commands ?? false
+  const attentionCounts = attentionSummary?.counts ?? {
+    running: 0,
+    authorization: 0,
+    repair: 0,
+    confirmation: 0,
+    clarification: 0,
+    warning: 0,
+    needs_input: 0,
+    needs_review: 0,
+  }
+  const reviewSummary = useMemo(
+    () => reviewEntries.reduce((acc, { item }) => {
+      acc.total += 1
+      if (item.severity === 'critical') acc.critical += 1
+      else if (item.severity === 'warning') acc.warning += 1
+      else acc.info += 1
+      return acc
+    }, { total: 0, critical: 0, warning: 0, info: 0 }),
+    [reviewEntries],
   )
 
   const loadJobsPage = useCallback((pageNumber: number, options?: { force?: boolean }) => {
@@ -1607,10 +1681,10 @@ export default function TaskMonitor({
   }, [projectId])
 
   useEffect(() => {
-    if ((incidentSummary?.total_open ?? 0) === 0) {
+    if (reviewSummary.total === 0) {
       setSupervisorReview(null)
     }
-  }, [incidentSummary?.total_open])
+  }, [reviewSummary.total])
 
   useEffect(() => {
     void loadJobsPage(page)
@@ -1630,7 +1704,7 @@ export default function TaskMonitor({
   useEffect(() => {
     if (eventVersion === 0) return
 
-    const shouldRefreshSupervisor = Boolean(supervisorReview) || (incidentSummary?.total_open ?? 0) > 0
+    const shouldRefreshSupervisor = Boolean(supervisorReview) || reviewSummary.total > 0
 
     if (projectEventRefreshTimerRef.current !== null) {
       window.clearTimeout(projectEventRefreshTimerRef.current)
@@ -1643,7 +1717,7 @@ export default function TaskMonitor({
       }
       projectEventRefreshTimerRef.current = null
     }, 250)
-  }, [eventVersion, incidentSummary?.total_open, loadJobsPage, loadSupervisorReview, page, refreshIncidents, supervisorReview])
+  }, [eventVersion, loadJobsPage, loadSupervisorReview, page, refreshIncidents, reviewSummary.total, supervisorReview])
 
   useEffect(() => {
     if (!autoSelectJobId) return
@@ -1705,12 +1779,12 @@ export default function TaskMonitor({
   }, [])
 
   useEffect(() => {
-    pendingAuthorizationJobs.forEach((job) => {
-      if (!authorizationSnapshots[job.id] && !authorizationSnapshotLoading[job.id]) {
-        void loadAuthorizationSnapshot(job.id)
+    pendingAuthorizationEntries.forEach(({ item }) => {
+      if (!authorizationSnapshots[item.job_id] && !authorizationSnapshotLoading[item.job_id]) {
+        void loadAuthorizationSnapshot(item.job_id)
       }
     })
-  }, [authorizationSnapshotLoading, authorizationSnapshots, loadAuthorizationSnapshot, pendingAuthorizationJobs])
+  }, [authorizationSnapshotLoading, authorizationSnapshots, loadAuthorizationSnapshot, pendingAuthorizationEntries])
 
   const loadRepairSnapshot = useCallback((jobId: string) => {
     setRepairSnapshotLoading((prev) => ({ ...prev, [jobId]: true }))
@@ -1741,12 +1815,12 @@ export default function TaskMonitor({
   }, [])
 
   useEffect(() => {
-    pendingRepairJobs.forEach((job) => {
-      if (!repairSnapshots[job.id] && !repairSnapshotLoading[job.id]) {
-        void loadRepairSnapshot(job.id)
+    pendingRepairEntries.forEach(({ item }) => {
+      if (!repairSnapshots[item.job_id] && !repairSnapshotLoading[item.job_id]) {
+        void loadRepairSnapshot(item.job_id)
       }
     })
-  }, [loadRepairSnapshot, pendingRepairJobs, repairSnapshotLoading, repairSnapshots])
+  }, [loadRepairSnapshot, pendingRepairEntries, repairSnapshotLoading, repairSnapshots])
 
   const resolveAuthorizationFromQueue = useCallback((jobId: string, authRequestId: string, action: 'approved' | 'rejected') => {
     setAuthorizationActionLoading((prev) => ({ ...prev, [jobId]: action }))
@@ -1881,7 +1955,130 @@ export default function TaskMonitor({
       </div>
 
       <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-3">
-        {pendingAuthorizationJobs.length > 0 && (
+        {(attentionSummary?.signal ?? 'idle') !== 'idle' && (
+          <div className={`rounded-xl border p-4 ${
+            attentionSummary?.signal === 'attention'
+              ? 'border-rose-500/20 bg-rose-500/8'
+              : attentionSummary?.signal === 'warning'
+                ? 'border-amber-500/20 bg-amber-500/8'
+                : 'border-emerald-500/20 bg-emerald-500/8'
+          }`}>
+            <div className={`text-xs font-semibold uppercase tracking-wide ${
+              attentionSummary?.signal === 'attention'
+                ? 'text-rose-300'
+                : attentionSummary?.signal === 'warning'
+                  ? 'text-amber-300'
+                  : 'text-emerald-300'
+            }`}>
+              {t('tasks_attention_heading')}
+            </div>
+            <div className="mt-1 text-xs text-text-muted">
+              {t('tasks_attention_hint')}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {attentionCounts.needs_input > 0 && (
+                <span className="rounded-full bg-rose-500/12 px-2 py-1 text-[11px] font-medium text-rose-200">
+                  {t('tasks_tray_attention')} {attentionCounts.needs_input}
+                </span>
+              )}
+              {attentionCounts.needs_review > 0 && (
+                <span className="rounded-full bg-amber-500/12 px-2 py-1 text-[11px] font-medium text-amber-200">
+                  {t('tasks_tray_warning')} {attentionCounts.needs_review}
+                </span>
+              )}
+              {attentionCounts.running > 0 && (
+                <span className="rounded-full bg-emerald-500/12 px-2 py-1 text-[11px] font-medium text-emerald-200">
+                  {t('tasks_tray_running')} {attentionCounts.running}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        {autoAuthorizeCommands && (
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/8 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+              {t('tasks_auto_authorize_heading')}
+            </div>
+            <div className="mt-1 text-sm text-text-primary">
+              {t('tasks_auto_authorize_summary')}
+            </div>
+            <div className="mt-1 text-xs text-text-muted">
+              {pendingAuthorizationEntries.length > 0
+                ? t('tasks_auto_authorize_legacy_hint').replace('{count}', String(pendingAuthorizationEntries.length))
+                : t('tasks_auto_authorize_hint')}
+            </div>
+          </div>
+        )}
+        {pendingOperatorEntries.length > 0 && (
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/8 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-violet-300">
+                  {t('tasks_pending_inputs_heading')}
+                </div>
+                <div className="mt-1 text-sm text-text-primary">
+                  {t('tasks_pending_inputs_summary').replace('{count}', String(pendingOperatorEntries.length))}
+                </div>
+                <div className="mt-1 text-xs text-text-muted">
+                  {t('tasks_pending_inputs_hint')}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 space-y-3">
+              {pendingOperatorEntries.map(({ item, job, incident }) => (
+                <div
+                  key={`pending-input-${item.key}`}
+                  className="rounded-lg border border-violet-500/10 bg-surface-raised/80 p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold text-text-primary">{job?.name ?? item.job_name ?? item.job_id}</span>
+                    {job?.status && <StatusBadge status={job.status} />}
+                    <span className="rounded-full bg-violet-500/12 px-2 py-0.5 text-[10px] text-violet-200">
+                      {formatAttentionReasonLabel(item.reason, t)}
+                    </span>
+                  </div>
+                  {job?.goal && (
+                    <div className="mt-1 text-[11px] text-text-muted break-words">
+                      {job.goal}
+                    </div>
+                  )}
+                  <div className="mt-2 text-xs text-text-primary">
+                    {item.summary}
+                  </div>
+                  {incident?.current_step_name && (
+                    <div className="mt-1 text-[11px] text-text-muted">
+                      {t('tasks_incident_current_step').replace('{step}', incident.current_step_name)}
+                    </div>
+                  )}
+                  {incident?.next_action && (
+                    <div className="mt-1 text-[11px] text-text-muted">
+                      {t(`tasks_incident_action_${incident.next_action}` as TranslationKey)}
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => focusJob(item.job_id)}
+                      className="rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-primary transition-colors hover:bg-surface-hover"
+                    >
+                      {t('tasks_supervisor_open_task')}
+                    </button>
+                    {(job?.thread_id || incident?.thread_id) && onOpenThread && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenThread((job?.thread_id ?? incident?.thread_id) || null, item.job_id)}
+                        className="rounded-lg border border-violet-500/25 px-3 py-1.5 text-xs text-violet-100 transition-colors hover:bg-violet-500/10"
+                      >
+                        {t('tasks_supervisor_open_chat')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {pendingAuthorizationEntries.length > 0 && (
           <div className="rounded-xl border border-sky-500/20 bg-sky-500/8 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -1889,7 +2086,7 @@ export default function TaskMonitor({
                   {t('tasks_pending_authorizations_heading')}
                 </div>
                 <div className="mt-1 text-sm text-text-primary">
-                  {t('tasks_pending_authorizations_summary').replace('{count}', String(pendingAuthorizationJobs.length))}
+                  {t('tasks_pending_authorizations_summary').replace('{count}', String(pendingAuthorizationEntries.length))}
                 </div>
                 <div className="mt-1 text-xs text-text-muted">
                   {t('tasks_pending_authorizations_hint')}
@@ -1897,19 +2094,19 @@ export default function TaskMonitor({
               </div>
             </div>
             <div className="mt-3 space-y-3">
-              {pendingAuthorizationJobs.map((job) => {
-                const snapshot = authorizationSnapshots[job.id]
+              {pendingAuthorizationEntries.map(({ item, job }) => {
+                const snapshot = authorizationSnapshots[item.job_id]
                 const authRequestId = snapshot?.auth_request_id
                 return (
                   <div
-                    key={`pending-auth-${job.id}`}
+                    key={`pending-auth-${item.job_id}`}
                     className="rounded-lg border border-sky-500/10 bg-surface-raised/80 p-3"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-text-primary">{job.name ?? job.id}</span>
-                      <StatusBadge status={job.status} />
+                      <span className="text-xs font-semibold text-text-primary">{job?.name ?? item.job_name ?? item.job_id}</span>
+                      {job?.status && <StatusBadge status={job.status} />}
                     </div>
-                    {job.goal && (
+                    {job?.goal && (
                       <div className="mt-1 text-[11px] text-text-muted break-words">
                         {job.goal}
                       </div>
@@ -1921,25 +2118,25 @@ export default function TaskMonitor({
                           subtitle={snapshot.command_type || snapshot.step_key || 'command'}
                           command={snapshot.command}
                           onAuthorize={() => {
-                            void resolveAuthorizationFromQueue(job.id, authRequestId, 'approved')
+                            void resolveAuthorizationFromQueue(item.job_id, authRequestId, 'approved')
                           }}
                           onReject={() => {
-                            void resolveAuthorizationFromQueue(job.id, authRequestId, 'rejected')
+                            void resolveAuthorizationFromQueue(item.job_id, authRequestId, 'rejected')
                           }}
-                          authActionLoading={authorizationActionLoading[job.id] ?? null}
+                          authActionLoading={authorizationActionLoading[item.job_id] ?? null}
                           actionRow={(
                             <>
                               <button
                                 type="button"
-                                onClick={() => focusJob(job.id)}
+                                onClick={() => focusJob(item.job_id)}
                                 className="rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-primary transition-colors hover:bg-surface-hover"
                               >
                                 {t('tasks_supervisor_open_task')}
                               </button>
-                              {job.thread_id && onOpenThread && (
+                              {job?.thread_id && onOpenThread && (
                                 <button
                                   type="button"
-                                  onClick={() => onOpenThread(job.thread_id ?? null, job.id)}
+                                  onClick={() => onOpenThread(job.thread_id ?? null, item.job_id)}
                                   className="rounded-lg border border-sky-500/25 px-3 py-1.5 text-xs text-sky-100 transition-colors hover:bg-sky-500/10"
                                 >
                                   {t('tasks_supervisor_open_chat')}
@@ -1950,7 +2147,7 @@ export default function TaskMonitor({
                         />
                       ) : (
                         <div className="rounded-lg border border-border-subtle/70 bg-surface-base/40 px-3 py-2 text-xs text-text-muted">
-                          {authorizationSnapshotLoading[job.id]
+                          {authorizationSnapshotLoading[item.job_id]
                             ? t('settings_loading')
                             : t('tasks_pending_authorizations_loading_command')}
                         </div>
@@ -1962,7 +2159,7 @@ export default function TaskMonitor({
             </div>
           </div>
         )}
-        {pendingRepairJobs.length > 0 && (
+        {pendingRepairEntries.length > 0 && (
           <div className="rounded-xl border border-rose-500/20 bg-rose-500/8 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -1970,7 +2167,7 @@ export default function TaskMonitor({
                   {t('tasks_pending_repairs_heading')}
                 </div>
                 <div className="mt-1 text-sm text-text-primary">
-                  {t('tasks_pending_repairs_summary').replace('{count}', String(pendingRepairJobs.length))}
+                  {t('tasks_pending_repairs_summary').replace('{count}', String(pendingRepairEntries.length))}
                 </div>
                 <div className="mt-1 text-xs text-text-muted">
                   {t('tasks_pending_repairs_hint')}
@@ -1978,19 +2175,19 @@ export default function TaskMonitor({
               </div>
             </div>
             <div className="mt-3 space-y-3">
-              {pendingRepairJobs.map((job) => {
-                const snapshot = repairSnapshots[job.id]
+              {pendingRepairEntries.map(({ item, job }) => {
+                const snapshot = repairSnapshots[item.job_id]
                 const repairRequestId = snapshot?.repair_request_id
                 return (
                   <div
-                    key={`pending-repair-${job.id}`}
+                    key={`pending-repair-${item.job_id}`}
                     className="rounded-lg border border-rose-500/10 bg-surface-raised/80 p-3"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-text-primary">{job.name ?? job.id}</span>
-                      <StatusBadge status={job.status} />
+                      <span className="text-xs font-semibold text-text-primary">{job?.name ?? item.job_name ?? item.job_id}</span>
+                      {job?.status && <StatusBadge status={job.status} />}
                     </div>
-                    {job.goal && (
+                    {job?.goal && (
                       <div className="mt-1 text-[11px] text-text-muted break-words">
                         {job.goal}
                       </div>
@@ -2002,33 +2199,33 @@ export default function TaskMonitor({
                           subtitle={snapshot?.step_key}
                           failedCommand={snapshot?.failed_command}
                           stderrExcerpt={snapshot?.stderr_excerpt}
-                          repairCommand={repairDrafts[job.id] ?? ''}
+                          repairCommand={repairDrafts[item.job_id] ?? ''}
                           onRepairCommandChange={(value) => {
-                            setRepairDrafts((prev) => ({ ...prev, [job.id]: value }))
+                            setRepairDrafts((prev) => ({ ...prev, [item.job_id]: value }))
                           }}
                           onSendRetry={() => {
-                            void resolveRepairFromQueue(job.id, repairRequestId, 'modify_params')
+                            void resolveRepairFromQueue(item.job_id, repairRequestId, 'modify_params')
                           }}
                           onRetryOriginal={() => {
-                            void resolveRepairFromQueue(job.id, repairRequestId, 'retry_original')
+                            void resolveRepairFromQueue(item.job_id, repairRequestId, 'retry_original')
                           }}
                           onCancelJob={() => {
-                            void resolveRepairFromQueue(job.id, repairRequestId, 'cancel_job')
+                            void resolveRepairFromQueue(item.job_id, repairRequestId, 'cancel_job')
                           }}
-                          repairActionLoading={repairActionLoadingByJob[job.id] ?? null}
+                          repairActionLoading={repairActionLoadingByJob[item.job_id] ?? null}
                           actionRow={(
                             <>
                               <button
                                 type="button"
-                                onClick={() => focusJob(job.id)}
+                                onClick={() => focusJob(item.job_id)}
                                 className="rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-primary transition-colors hover:bg-surface-hover"
                               >
                                 {t('tasks_supervisor_open_task')}
                               </button>
-                              {job.thread_id && onOpenThread && (
+                              {job?.thread_id && onOpenThread && (
                                 <button
                                   type="button"
-                                  onClick={() => onOpenThread(job.thread_id ?? null, job.id)}
+                                  onClick={() => onOpenThread(job.thread_id ?? null, item.job_id)}
                                   className="rounded-lg border border-rose-500/25 px-3 py-1.5 text-xs text-rose-100 transition-colors hover:bg-rose-500/10"
                                 >
                                   {t('tasks_supervisor_open_chat')}
@@ -2039,7 +2236,7 @@ export default function TaskMonitor({
                         />
                       ) : (
                         <div className="rounded-lg border border-border-subtle/70 bg-surface-base/40 px-3 py-2 text-xs text-text-muted">
-                          {repairSnapshotLoading[job.id]
+                          {repairSnapshotLoading[item.job_id]
                             ? t('settings_loading')
                             : t('tasks_pending_repairs_loading_payload')}
                         </div>
@@ -2051,7 +2248,7 @@ export default function TaskMonitor({
             </div>
           </div>
         )}
-        {incidentSummary && incidentSummary.total_open > 0 && (
+        {reviewEntries.length > 0 && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 p-4">
             <div className="flex flex-wrap items-center gap-2 justify-between">
               <div>
@@ -2060,10 +2257,10 @@ export default function TaskMonitor({
                 </div>
                 <div className="mt-1 text-sm text-text-primary">
                   {t('tasks_incident_summary')
-                    .replace('{total}', String(incidentSummary.total_open))
-                    .replace('{critical}', String(incidentSummary.critical))
-                    .replace('{warning}', String(incidentSummary.warning))
-                    .replace('{info}', String(incidentSummary.info))}
+                    .replace('{total}', String(reviewSummary.total))
+                    .replace('{critical}', String(reviewSummary.critical))
+                    .replace('{warning}', String(reviewSummary.warning))
+                    .replace('{info}', String(reviewSummary.info))}
                 </div>
               </div>
               <button
@@ -2076,26 +2273,26 @@ export default function TaskMonitor({
               </button>
             </div>
             <div className="mt-3 space-y-2">
-              {incidents.slice(0, 5).map((incident) => {
-                const ageMinutes = incident.age_seconds != null ? Math.max(1, Math.floor(incident.age_seconds / 60)) : null
-                const severityClass = incident.severity === 'critical'
+              {reviewEntries.slice(0, 5).map(({ item, job, incident }) => {
+                const ageMinutes = item.age_seconds != null ? Math.max(1, Math.floor(item.age_seconds / 60)) : null
+                const severityClass = item.severity === 'critical'
                   ? 'border-red-500/20 bg-red-500/8'
-                  : incident.severity === 'warning'
+                  : item.severity === 'warning'
                     ? 'border-amber-500/20 bg-amber-500/8'
                     : 'border-sky-500/20 bg-sky-500/8'
-                const badgeClass = incident.owner === 'user'
+                const badgeClass = item.owner === 'user'
                   ? 'bg-indigo-500/15 text-indigo-300'
                   : 'bg-surface-overlay text-text-muted'
                 return (
                   <div
-                    key={`${incident.job_id}-${incident.incident_type}`}
+                    key={item.key}
                     className={`rounded-lg border p-3 ${severityClass}`}
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-text-primary">{incident.job_name}</span>
-                      <StatusBadge status={incident.job_status} />
+                      <span className="text-xs font-semibold text-text-primary">{job?.name ?? item.job_name}</span>
+                      {job?.status && <StatusBadge status={job.status} />}
                       <span className={`rounded-full px-2 py-0.5 text-[10px] ${badgeClass}`}>
-                        {incident.owner === 'user' ? t('tasks_incident_owner_user') : t('tasks_incident_owner_system')}
+                        {item.owner === 'user' ? t('tasks_incident_owner_user') : t('tasks_incident_owner_system')}
                       </span>
                       {ageMinutes != null && (
                         <span className="text-[11px] text-text-muted">
@@ -2103,15 +2300,17 @@ export default function TaskMonitor({
                         </span>
                       )}
                     </div>
-                    <div className="mt-2 text-xs text-text-primary">{incident.summary}</div>
-                    {incident.current_step_name && (
+                    <div className="mt-2 text-xs text-text-primary">{item.summary}</div>
+                    {incident?.current_step_name && (
                       <div className="mt-1 text-[11px] text-text-muted">
                         {t('tasks_incident_current_step').replace('{step}', incident.current_step_name)}
                       </div>
                     )}
-                    <div className="mt-1 text-[11px] text-text-muted">
-                      {t(`tasks_incident_action_${incident.next_action}` as TranslationKey)}
-                    </div>
+                    {incident?.next_action && (
+                      <div className="mt-1 text-[11px] text-text-muted">
+                        {t(`tasks_incident_action_${incident.next_action}` as TranslationKey)}
+                      </div>
+                    )}
                   </div>
                 )
               })}

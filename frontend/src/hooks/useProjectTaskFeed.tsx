@@ -53,11 +53,44 @@ export interface ProjectTaskOverview {
   by_status?: Record<string, number>
 }
 
+export interface ProjectTaskAttentionItem {
+  key: string
+  job_id: string
+  job_name: string
+  incident_type: string
+  reason: 'authorization' | 'repair' | 'confirmation' | 'clarification' | 'warning'
+  age_seconds: number
+  summary: string
+  severity: 'info' | 'warning' | 'critical'
+  owner: 'user' | 'system'
+  pending_interaction_type?: string | null
+}
+
+export interface ProjectTaskAttentionSummary {
+  signal: 'idle' | 'running' | 'warning' | 'attention'
+  count: number
+  counts: {
+    running: number
+    authorization: number
+    repair: number
+    confirmation: number
+    clarification: number
+    warning: number
+    needs_input: number
+    needs_review: number
+  }
+  needs_input: ProjectTaskAttentionItem[]
+  needs_review: ProjectTaskAttentionItem[]
+  reminders: ProjectTaskAttentionItem[]
+  auto_authorize_commands: boolean
+}
+
 interface ProjectTaskFeedContextValue {
   jobs: ProjectTaskJob[]
   incidents: ProjectTaskIncident[]
   incidentSummary: ProjectTaskIncidentSummary | null
   overview: ProjectTaskOverview | null
+  attentionSummary: ProjectTaskAttentionSummary | null
   eventVersion: number
   totalCount: number
   getJobsPage: (pageNumber: number) => ProjectTaskJob[]
@@ -66,6 +99,7 @@ interface ProjectTaskFeedContextValue {
   locateJobPage: (jobId: string) => Promise<number | null>
   refreshJobPage: (pageNumber: number, options?: { force?: boolean }) => Promise<ProjectTaskJob[]>
   refreshJobs: () => Promise<ProjectTaskJob[]>
+  refreshAttentionSummary: () => Promise<void>
   refreshIncidents: () => Promise<void>
   refreshAll: () => Promise<void>
 }
@@ -91,6 +125,7 @@ export function ProjectTaskFeedProvider({
   const [incidents, setIncidents] = useState<ProjectTaskIncident[]>([])
   const [incidentSummary, setIncidentSummary] = useState<ProjectTaskIncidentSummary | null>(null)
   const [overview, setOverview] = useState<ProjectTaskOverview | null>(null)
+  const [attentionSummary, setAttentionSummary] = useState<ProjectTaskAttentionSummary | null>(null)
   const [eventVersion, setEventVersion] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
   const wasConnectedRef = useRef(false)
@@ -191,30 +226,30 @@ export function ProjectTaskFeedProvider({
     return result.jobs
   }, [fetchJobs, updateJobPageHasMore, updateJobPages, updateJobs, updateTotalCount])
 
-  const refreshIncidents = useCallback(async () => {
+  const refreshAttentionSummary = useCallback(async () => {
     const params = new URLSearchParams()
     if (projectId) params.set('project', projectId)
-    const response = await fetch(`/api/jobs/incidents?${params.toString()}`)
+    const response = await fetch(`/api/jobs/attention-summary?${params.toString()}`)
     const payload = await response.json().catch(() => ({}))
+    setAttentionSummary((payload as ProjectTaskAttentionSummary | undefined) ?? null)
     setIncidentSummary((payload.summary as ProjectTaskIncidentSummary | undefined) ?? { total_open: 0, critical: 0, warning: 0, info: 0 })
     setIncidents(Array.isArray(payload.incidents) ? payload.incidents as ProjectTaskIncident[] : [])
-  }, [projectId])
-
-  const refreshOverview = useCallback(async () => {
-    const params = new URLSearchParams()
-    if (projectId) params.set('project', projectId)
-    const response = await fetch(`/api/jobs/overview?${params.toString()}`)
-    const payload = await response.json().catch(() => ({}))
     setOverview({
-      total: typeof payload.total === 'number' ? payload.total : 0,
-      active: typeof payload.active === 'number' ? payload.active : 0,
-      by_status: typeof payload.by_status === 'object' && payload.by_status ? payload.by_status as Record<string, number> : {},
+      total: typeof payload.overview?.total === 'number' ? payload.overview.total : 0,
+      active: typeof payload.overview?.active === 'number' ? payload.overview.active : 0,
+      by_status: typeof payload.overview?.by_status === 'object' && payload.overview?.by_status
+        ? payload.overview.by_status as Record<string, number>
+        : {},
     })
   }, [projectId])
 
+  const refreshIncidents = useCallback(async () => {
+    await refreshAttentionSummary()
+  }, [refreshAttentionSummary])
+
   const refreshAll = useCallback(async () => {
     try {
-      await Promise.all([refreshJobs(), refreshIncidents(), refreshOverview()])
+      await Promise.all([refreshJobs(), refreshAttentionSummary()])
     } catch {
       updateJobs([])
       updateJobPages({})
@@ -223,8 +258,9 @@ export function ProjectTaskFeedProvider({
       setIncidents([])
       setIncidentSummary(null)
       setOverview(null)
+      setAttentionSummary(null)
     }
-  }, [refreshIncidents, refreshJobs, refreshOverview, updateJobPageHasMore, updateJobPages, updateJobs, updateTotalCount])
+  }, [refreshAttentionSummary, refreshJobs, updateJobPageHasMore, updateJobPages, updateJobs, updateTotalCount])
 
   const patchJob = useCallback((jobId: string, patch: Partial<ProjectTaskJob>) => {
     updateJobs((prev) => prev.map((job) => (job.id === jobId ? { ...job, ...patch } : job)))
@@ -289,6 +325,7 @@ export function ProjectTaskFeedProvider({
     setIncidents([])
     setIncidentSummary(null)
     setOverview(null)
+    setAttentionSummary(null)
     updateTotalCount(0)
   }, [projectId, updateJobPageHasMore, updateJobPages, updateJobs, updateTotalCount])
 
@@ -329,18 +366,18 @@ export function ProjectTaskFeedProvider({
         void refreshJobs()
       }
 
-      void refreshIncidents()
-      void refreshOverview()
+      void refreshAttentionSummary()
       setEventVersion((prev) => prev + 1)
     })
     return () => { unsub() }
-  }, [patchJob, projectId, refreshIncidents, refreshJobs, refreshOverview, updateJobPages, updateJobs, ws])
+  }, [patchJob, projectId, refreshAttentionSummary, refreshJobs, updateJobPages, updateJobs, ws])
 
   const value = useMemo<ProjectTaskFeedContextValue>(() => ({
     jobs,
     incidents,
     incidentSummary,
     overview,
+    attentionSummary,
     eventVersion,
     totalCount,
     getJobsPage,
@@ -349,9 +386,11 @@ export function ProjectTaskFeedProvider({
     locateJobPage,
     refreshJobPage,
     refreshJobs,
+    refreshAttentionSummary,
     refreshIncidents,
     refreshAll,
   }), [
+    attentionSummary,
     eventVersion,
     getJobsPage,
     getPageHasMore,
@@ -362,6 +401,7 @@ export function ProjectTaskFeedProvider({
     locateJobPage,
     patchJob,
     refreshAll,
+    refreshAttentionSummary,
     refreshIncidents,
     refreshJobPage,
     refreshJobs,

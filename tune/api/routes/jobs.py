@@ -2512,6 +2512,109 @@ async def _collect_job_status_summary(
     }
 
 
+def _normalize_attention_reason(incident_type: str | None) -> str | None:
+    raw = str(incident_type or "").strip()
+    if raw in {"authorization", "repair"}:
+        return raw
+    if raw in {"plan_confirmation", "execution_confirmation"}:
+        return "confirmation"
+    if raw == "resource_clarification":
+        return "clarification"
+    if raw in {"stalled", "resume_failed", "job_status_mismatch", "orphan_pending_request", "failed", "interrupted", "binding_required"}:
+        return "warning"
+    return None
+
+
+def _build_task_attention_summary_payload(
+    incidents: list[dict],
+    overview: dict,
+    *,
+    auto_authorize_commands: bool = False,
+    reminder_threshold_seconds: int = 120,
+) -> dict:
+    normalized: list[dict] = []
+    for incident in incidents:
+        reason = _normalize_attention_reason(incident.get("incident_type"))
+        if not reason:
+            continue
+        normalized.append({
+            "key": f"{incident.get('job_id')}:{reason}",
+            "job_id": incident.get("job_id"),
+            "job_name": incident.get("job_name"),
+            "incident_type": incident.get("incident_type"),
+            "reason": reason,
+            "age_seconds": int(incident.get("age_seconds") or 0),
+            "summary": incident.get("summary"),
+            "severity": incident.get("severity"),
+            "owner": incident.get("owner"),
+            "pending_interaction_type": incident.get("pending_interaction_type"),
+        })
+
+    needs_input = [item for item in normalized if item["reason"] != "warning"]
+    needs_review = [item for item in normalized if item["reason"] == "warning"]
+
+    counts = {
+        "running": int(((overview or {}).get("by_status") or {}).get("running", 0) or 0),
+        "authorization": sum(1 for item in needs_input if item["reason"] == "authorization"),
+        "repair": sum(1 for item in needs_input if item["reason"] == "repair"),
+        "confirmation": sum(1 for item in needs_input if item["reason"] == "confirmation"),
+        "clarification": sum(1 for item in needs_input if item["reason"] == "clarification"),
+        "warning": len(needs_review),
+        "needs_input": len(needs_input),
+        "needs_review": len(needs_review),
+    }
+
+    signal = (
+        "attention" if counts["needs_input"] > 0
+        else "warning" if counts["needs_review"] > 0
+        else "running" if counts["running"] > 0
+        else "idle"
+    )
+    count = (
+        counts["needs_input"] if counts["needs_input"] > 0
+        else counts["needs_review"] if counts["needs_review"] > 0
+        else counts["running"]
+    )
+    reminders = [
+        item
+        for item in needs_input
+        if int(item.get("age_seconds") or 0) >= reminder_threshold_seconds
+    ]
+
+    return {
+        "signal": signal,
+        "count": count,
+        "counts": counts,
+        "needs_input": needs_input,
+        "needs_review": needs_review,
+        "reminders": reminders,
+        "auto_authorize_commands": bool(auto_authorize_commands),
+    }
+
+
+async def _collect_job_attention_summary(
+    session: AsyncSession,
+    project: str | None = None,
+) -> dict:
+    from tune.core.config import get_config
+
+    incidents, summary, _dossiers = await _collect_job_supervisor_data(session, project=project)
+    overview = await _collect_job_status_summary(session, project=project)
+    try:
+        auto_authorize_commands = bool(get_config().auto_authorize_commands)
+    except RuntimeError:
+        auto_authorize_commands = False
+    attention = _build_task_attention_summary_payload(
+        incidents,
+        overview,
+        auto_authorize_commands=auto_authorize_commands,
+    )
+    attention["summary"] = summary
+    attention["incidents"] = incidents
+    attention["overview"] = overview
+    return attention
+
+
 async def _collect_job_supervisor_data(
     session: AsyncSession,
     project: str | None = None,
@@ -3006,6 +3109,14 @@ async def get_job_overview(
     session: AsyncSession = Depends(get_session),
 ):
     return await _collect_job_status_summary(session, project=project)
+
+
+@router.get("/attention-summary")
+async def get_job_attention_summary(
+    project: str | None = None,
+    session: AsyncSession = Depends(get_session),
+):
+    return await _collect_job_attention_summary(session, project=project)
 
 
 @router.get("/supervisor-dossier")

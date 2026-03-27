@@ -8,6 +8,7 @@ import ErrorRecoveryPanel from './ErrorRecoveryPanel'
 import ResultViewer, { type ResultItem } from './ResultViewer'
 import { useLanguage } from '../i18n/LanguageContext'
 import type { Lang } from '../i18n/translations'
+import { formatTaskAttentionReason, type TaskAttentionReminder } from '../lib/taskAttention'
 
 type ConfirmationPhase = 'abstract' | 'execution'
 
@@ -38,14 +39,6 @@ interface Message {
   newFilesEvent?: { count: number; types: Record<string, number> }
 }
 
-interface TaskAttentionReminder {
-  key: string
-  jobId: string
-  jobName: string
-  incidentType: string
-  ageSeconds: number
-}
-
 interface Props {
   ws: ReturnType<typeof import('../hooks/useWebSocket').useWebSocket>
   projectId: string | null
@@ -59,23 +52,6 @@ interface Props {
   onNavigateToData?: () => void
   onOpenThreadDrawer?: () => void
   taskAttentionReminders?: TaskAttentionReminder[]
-}
-
-function formatTaskReminderReason(incidentType: string, lang: Lang) {
-  const labels: Record<string, { zh: string; en: string }> = {
-    authorization: { zh: '命令授权', en: 'authorization' },
-    repair: { zh: '人工修复', en: 'repair' },
-    plan_confirmation: { zh: '分析计划确认', en: 'plan confirmation' },
-    execution_confirmation: { zh: '执行图确认', en: 'execution confirmation' },
-    resource_clarification: { zh: '资源澄清', en: 'resource clarification' },
-  }
-  if (labels[incidentType]) {
-    return labels[incidentType][lang]
-  }
-  switch (incidentType) {
-    default:
-      return incidentType
-  }
 }
 
 export default function ChatPanel({ ws, projectId, lang, threadTitle, llmReachable = true, onJobStarted, onAnalysisResult, onNavigateToSettings, onNavigateToData, onOpenThreadDrawer, taskAttentionReminders = [] }: Props) {
@@ -342,8 +318,8 @@ export default function ChatPanel({ ws, projectId, lang, threadTitle, llmReachab
         id: `task-reminder-${reminder.key}`,
         role: 'system',
         content: lang === 'zh'
-          ? `任务“${reminder.jobName}”仍在等待${formatTaskReminderReason(reminder.incidentType, lang)}，已超过 ${waitMinutes} 分钟。请打开右侧任务面板处理。`
-          : `Task "${reminder.jobName}" is still waiting on ${formatTaskReminderReason(reminder.incidentType, lang)} after ${waitMinutes} minute(s). Open the task tray on the right to continue.`,
+          ? `任务“${reminder.jobName}”仍在等待${formatTaskAttentionReason(reminder.reason, lang)}，已超过 ${waitMinutes} 分钟。请打开右侧任务面板处理。`
+          : `Task "${reminder.jobName}" is still waiting on ${formatTaskAttentionReason(reminder.reason, lang)} after ${waitMinutes} minute(s). Open the task tray on the right to continue.`,
       })
     }
 

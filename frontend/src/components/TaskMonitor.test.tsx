@@ -38,6 +38,48 @@ describe('TaskMonitor', () => {
 
     mockUseProjectTaskFeed.mockReturnValue({
       jobs: [],
+      attentionSummary: {
+        signal: 'attention',
+        count: 1,
+        counts: {
+          running: 0,
+          authorization: 0,
+          repair: 0,
+          confirmation: 1,
+          clarification: 0,
+          warning: 0,
+          needs_input: 1,
+          needs_review: 0,
+        },
+        needs_input: [
+          {
+            key: 'job-1:confirmation',
+            job_id: 'job-1',
+            job_name: 'RNA-seq confirmation',
+            incident_type: 'execution_confirmation',
+            reason: 'confirmation',
+            age_seconds: 120,
+            summary: 'Execution graph is waiting for final confirmation.',
+            severity: 'info',
+            owner: 'user',
+          },
+        ],
+        needs_review: [],
+        reminders: [
+          {
+            key: 'job-1:confirmation',
+            job_id: 'job-1',
+            job_name: 'RNA-seq confirmation',
+            incident_type: 'execution_confirmation',
+            reason: 'confirmation',
+            age_seconds: 120,
+            summary: 'Execution graph is waiting for final confirmation.',
+            severity: 'info',
+            owner: 'user',
+          },
+        ],
+        auto_authorize_commands: false,
+      },
       incidents: [
         {
           job_id: 'job-1',
@@ -79,6 +121,7 @@ describe('TaskMonitor', () => {
         },
       ]),
       refreshJobs: vi.fn().mockResolvedValue([]),
+      refreshAttentionSummary: vi.fn().mockResolvedValue(undefined),
       refreshIncidents: vi.fn().mockResolvedValue(undefined),
       refreshAll: vi.fn().mockResolvedValue(undefined),
     })
@@ -148,8 +191,122 @@ describe('TaskMonitor', () => {
     expect(screen.getByRole('button', { name: 'Open Chat' })).toBeInTheDocument()
   })
 
+  it('shows a unified attention summary banner for normalized task input states', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: async () => ({}) })))
+
+    renderTaskMonitor({
+      projectId: 'proj-1',
+      onOpenThread: vi.fn(),
+    })
+
+    expect(await screen.findByText('Attention Queue')).toBeInTheDocument()
+    expect(screen.getByText(/Needs input\s+1/)).toBeInTheDocument()
+  })
+
+  it('surfaces confirmation work in the unified pending input section', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: async () => ({}) })))
+
+    renderTaskMonitor({
+      projectId: 'proj-1',
+      onOpenThread: vi.fn(),
+    })
+
+    expect(await screen.findByText('Pending Operator Input')).toBeInTheDocument()
+    expect(screen.getByText('1 task(s) are waiting for confirmation or clarification.')).toBeInTheDocument()
+    expect(screen.getAllByText('Awaiting Confirmation')).toHaveLength(2)
+    expect(screen.getByText('Execution graph is waiting for final confirmation.')).toBeInTheDocument()
+  })
+
   it('emits resource workspace navigation requests from supervisor review', async () => {
     const onOpenResourceWorkspace = vi.fn()
+
+    mockUseProjectTaskFeed.mockReturnValue({
+      jobs: [
+        {
+          id: 'job-1',
+          name: 'RNA-seq confirmation',
+          status: 'awaiting_plan_confirmation',
+          goal: 'Analyze apple RNA-seq data',
+          thread_id: 'thread-1',
+          created_at: '2026-03-26T10:00:00Z',
+        },
+      ],
+      attentionSummary: {
+        signal: 'warning',
+        count: 1,
+        counts: {
+          running: 0,
+          authorization: 0,
+          repair: 0,
+          confirmation: 0,
+          clarification: 0,
+          warning: 1,
+          needs_input: 0,
+          needs_review: 1,
+        },
+        needs_input: [],
+        needs_review: [
+          {
+            key: 'job-1:binding',
+            job_id: 'job-1',
+            job_name: 'RNA-seq confirmation',
+            incident_type: 'binding',
+            reason: 'warning',
+            age_seconds: 180,
+            summary: 'Reference FASTA is missing.',
+            severity: 'warning',
+            owner: 'system',
+          },
+        ],
+        reminders: [],
+        auto_authorize_commands: false,
+      },
+      incidents: [
+        {
+          job_id: 'job-1',
+          job_name: 'RNA-seq confirmation',
+          job_status: 'awaiting_plan_confirmation',
+          incident_type: 'binding',
+          severity: 'warning',
+          owner: 'system',
+          summary: 'Reference FASTA is missing.',
+          next_action: 'inspect_bindings_and_resume',
+          age_seconds: 180,
+          thread_id: 'thread-1',
+        },
+      ],
+      incidentSummary: { total_open: 4, critical: 1, warning: 2, info: 1 },
+      overview: { total: 1, active: 1, by_status: { awaiting_plan_confirmation: 1 } },
+      eventVersion: 0,
+      totalCount: 1,
+      getJobsPage: () => [
+        {
+          id: 'job-1',
+          name: 'RNA-seq confirmation',
+          status: 'awaiting_plan_confirmation',
+          goal: 'Analyze apple RNA-seq data',
+          thread_id: 'thread-1',
+          created_at: '2026-03-26T10:00:00Z',
+        },
+      ],
+      getPageHasMore: () => false,
+      patchJob: vi.fn(),
+      locateJobPage: vi.fn().mockResolvedValue(1),
+      refreshJobPage: vi.fn().mockResolvedValue([
+        {
+          id: 'job-1',
+          name: 'RNA-seq confirmation',
+          status: 'awaiting_plan_confirmation',
+          goal: 'Analyze apple RNA-seq data',
+          thread_id: 'thread-1',
+          created_at: '2026-03-26T10:00:00Z',
+        },
+      ]),
+      refreshJobs: vi.fn().mockResolvedValue([]),
+      refreshAttentionSummary: vi.fn().mockResolvedValue(undefined),
+      refreshIncidents: vi.fn().mockResolvedValue(undefined),
+      refreshAll: vi.fn().mockResolvedValue(undefined),
+    })
 
     vi.stubGlobal(
       'fetch',
@@ -232,6 +389,7 @@ describe('TaskMonitor', () => {
       onOpenResourceWorkspace,
     })
 
+    expect(await screen.findByText('1 open · 0 critical · 1 warning · 0 info')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Supervisor Review' }))
 
     const button = await screen.findByRole('button', { name: 'Open Resource Registry' })
@@ -275,6 +433,36 @@ describe('TaskMonitor', () => {
           created_at: '2026-03-27T08:00:00Z',
         },
       ],
+      attentionSummary: {
+        signal: 'attention',
+        count: 1,
+        counts: {
+          running: 0,
+          authorization: 1,
+          repair: 0,
+          confirmation: 0,
+          clarification: 0,
+          warning: 0,
+          needs_input: 1,
+          needs_review: 0,
+        },
+        needs_input: [
+          {
+            key: 'job-auth:authorization',
+            job_id: 'job-auth',
+            job_name: 'DESeq2 run',
+            incident_type: 'authorization',
+            reason: 'authorization',
+            age_seconds: 60,
+            summary: 'Authorization is pending.',
+            severity: 'info',
+            owner: 'user',
+          },
+        ],
+        needs_review: [],
+        reminders: [],
+        auto_authorize_commands: false,
+      },
       incidents: [],
       incidentSummary: { total_open: 0, critical: 0, warning: 0, info: 0 },
       overview: { total: 1, active: 1, by_status: { waiting_for_authorization: 1 } },
@@ -296,6 +484,7 @@ describe('TaskMonitor', () => {
       locateJobPage: vi.fn().mockResolvedValue(1),
       refreshJobPage,
       refreshJobs: vi.fn().mockResolvedValue([]),
+      refreshAttentionSummary: vi.fn().mockResolvedValue(undefined),
       refreshIncidents: vi.fn().mockResolvedValue(undefined),
       refreshAll,
     })
@@ -387,6 +576,36 @@ describe('TaskMonitor', () => {
           created_at: '2026-03-27T09:00:00Z',
         },
       ],
+      attentionSummary: {
+        signal: 'attention',
+        count: 1,
+        counts: {
+          running: 0,
+          authorization: 0,
+          repair: 1,
+          confirmation: 0,
+          clarification: 0,
+          warning: 0,
+          needs_input: 1,
+          needs_review: 0,
+        },
+        needs_input: [
+          {
+            key: 'job-repair:repair',
+            job_id: 'job-repair',
+            job_name: 'featureCounts repair',
+            incident_type: 'repair',
+            reason: 'repair',
+            age_seconds: 60,
+            summary: 'Repair is pending.',
+            severity: 'info',
+            owner: 'user',
+          },
+        ],
+        needs_review: [],
+        reminders: [],
+        auto_authorize_commands: false,
+      },
       incidents: [],
       incidentSummary: { total_open: 0, critical: 0, warning: 0, info: 0 },
       overview: { total: 1, active: 1, by_status: { waiting_for_repair: 1 } },
@@ -408,6 +627,7 @@ describe('TaskMonitor', () => {
       locateJobPage: vi.fn().mockResolvedValue(1),
       refreshJobPage,
       refreshJobs: vi.fn().mockResolvedValue([]),
+      refreshAttentionSummary: vi.fn().mockResolvedValue(undefined),
       refreshIncidents: vi.fn().mockResolvedValue(undefined),
       refreshAll,
     })
@@ -478,5 +698,54 @@ describe('TaskMonitor', () => {
       expect(refreshAll).toHaveBeenCalled()
       expect(refreshJobPage).toHaveBeenCalledWith(1, { force: true })
     })
+  })
+
+  it('shows an auto-authorization status banner when workspace auto-approve is enabled', async () => {
+    mockUseProjectTaskFeed.mockReturnValue({
+      jobs: [],
+      attentionSummary: {
+        signal: 'idle',
+        count: 0,
+        counts: {
+          running: 0,
+          authorization: 0,
+          repair: 0,
+          confirmation: 0,
+          clarification: 0,
+          warning: 0,
+          needs_input: 0,
+          needs_review: 0,
+        },
+        needs_input: [],
+        needs_review: [],
+        reminders: [],
+        auto_authorize_commands: true,
+      },
+      incidents: [],
+      incidentSummary: { total_open: 0, critical: 0, warning: 0, info: 0 },
+      overview: { total: 0, active: 0, by_status: {} },
+      eventVersion: 0,
+      totalCount: 0,
+      getJobsPage: () => [],
+      getPageHasMore: () => false,
+      patchJob: vi.fn(),
+      locateJobPage: vi.fn().mockResolvedValue(1),
+      refreshJobPage: vi.fn().mockResolvedValue([]),
+      refreshJobs: vi.fn().mockResolvedValue([]),
+      refreshAttentionSummary: vi.fn().mockResolvedValue(undefined),
+      refreshIncidents: vi.fn().mockResolvedValue(undefined),
+      refreshAll: vi.fn().mockResolvedValue(undefined),
+    })
+
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: async () => ({}) })))
+
+    renderTaskMonitor({
+      projectId: 'proj-1',
+      onOpenThread: vi.fn(),
+    })
+
+    expect(await screen.findByText('Automatic Command Authorization')).toBeInTheDocument()
+    expect(screen.getByText('New analysis commands are currently being auto-authorized from workspace settings.')).toBeInTheDocument()
+    expect(screen.getByText('Per-task authorization prompts are suppressed until you disable the setting in Settings -> Execution.')).toBeInTheDocument()
   })
 })

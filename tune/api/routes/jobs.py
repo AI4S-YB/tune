@@ -807,6 +807,11 @@ def _build_safe_action_note(
             for package, candidates in (env_failure.get("package_candidates") or {}).items()
             if str(package).strip()
         }
+        implicated_steps = [
+            item
+            for item in (env_failure.get("implicated_steps") or [])
+            if isinstance(item, dict)
+        ]
         if bool(env_failure.get("retryable")) and failure_kind == "missing_package":
             candidate_fragments = []
             for package, candidates in package_candidates.items():
@@ -817,10 +822,25 @@ def _build_safe_action_note(
                 candidate_note = " Suggested package candidates: " + "; ".join(candidate_fragments) + "."
             else:
                 candidate_note = ""
+            step_fragments: list[str] = []
+            for item in implicated_steps[:3]:
+                label = str(item.get("display_name") or item.get("step_key") or "").strip()
+                packages = [
+                    str(pkg).strip()
+                    for pkg in (item.get("packages") or [])
+                    if str(pkg).strip()
+                ]
+                if not label:
+                    continue
+                if packages:
+                    step_fragments.append(f"{label} ({', '.join(packages)})")
+                else:
+                    step_fragments.append(label)
+            step_note = f" Check order: {'; '.join(step_fragments)}." if step_fragments else ""
             return (
                 "This environment failure looks retryable after correcting package resolution, step-to-package "
                 "mapping, or dynamic spec pixi_packages, but no safe automatic environment repair is enabled yet."
-                f"{candidate_note}"
+                f"{step_note}{candidate_note}"
             )
         return (
             "This environment failure occurred before execution started and still requires manual environment "

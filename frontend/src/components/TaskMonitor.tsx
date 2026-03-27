@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronRight, PlayCircle, Trash2 } from 'lucide-react'
 import type { ResourceWorkspaceRequest } from './DataBrowser'
@@ -755,6 +755,174 @@ function splitIssueText(errorMessage: string | null | undefined): string[] {
     .filter(Boolean)
 }
 
+function CommandPreview({
+  command,
+  className = '',
+}: {
+  command: string
+  className?: string
+}) {
+  return (
+    <div
+      className={`rounded-md border border-border-subtle bg-surface-raised/80 p-2 text-xs font-mono text-text-primary whitespace-pre ${className}`}
+      style={{ maxHeight: 224, overflowY: 'auto', overflowX: 'auto' }}
+    >
+      {command}
+    </div>
+  )
+}
+
+function AuthorizationPromptCard({
+  title,
+  subtitle,
+  command,
+  onAuthorize,
+  onReject,
+  authActionLoading,
+  actionRow,
+}: {
+  title: string
+  subtitle?: string | null
+  command: string
+  onAuthorize: () => void
+  onReject: () => void
+  authActionLoading: string | null
+  actionRow?: ReactNode
+}) {
+  const { t } = useLanguage()
+
+  return (
+    <div className="rounded-lg border border-sky-500/20 bg-sky-500/8 p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-300 mb-2">
+        {title}
+      </div>
+      {subtitle && (
+        <div className="text-xs text-text-muted mb-2">
+          {subtitle}
+        </div>
+      )}
+      <CommandPreview command={command} />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onAuthorize}
+          disabled={authActionLoading !== null}
+          className="px-3 py-1.5 rounded-lg bg-emerald-700/70 hover:bg-emerald-600/70 text-xs text-white disabled:opacity-50"
+        >
+          {authActionLoading === 'approved' ? '…' : t('auth_authorize')}
+        </button>
+        <button
+          type="button"
+          onClick={onReject}
+          disabled={authActionLoading !== null}
+          className="px-3 py-1.5 rounded-lg bg-red-700/70 hover:bg-red-600/70 text-xs text-white disabled:opacity-50"
+        >
+          {authActionLoading === 'rejected' ? '…' : t('auth_reject')}
+        </button>
+      </div>
+      {actionRow && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {actionRow}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RepairPromptCard({
+  title,
+  subtitle,
+  failedCommand,
+  stderrExcerpt,
+  repairCommand,
+  onRepairCommandChange,
+  onSendRetry,
+  onRetryOriginal,
+  onCancelJob,
+  repairActionLoading,
+  actionRow,
+}: {
+  title: string
+  subtitle?: string | null
+  failedCommand?: string | null
+  stderrExcerpt?: string | null
+  repairCommand: string
+  onRepairCommandChange: (value: string) => void
+  onSendRetry: () => void
+  onRetryOriginal: () => void
+  onCancelJob: () => void
+  repairActionLoading: string | null
+  actionRow?: ReactNode
+}) {
+  const { t } = useLanguage()
+
+  return (
+    <div className="rounded-lg border border-rose-500/20 bg-rose-500/8 p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-rose-300 mb-2">
+        {title}
+      </div>
+      {subtitle && (
+        <div className="text-xs text-text-muted mb-2">{subtitle}</div>
+      )}
+      {failedCommand && (
+        <>
+          <div className="text-xs text-text-muted mb-2">{t('recovery_failing_command')}</div>
+          <div className="mb-3">
+            <CommandPreview command={failedCommand} />
+          </div>
+        </>
+      )}
+      {stderrExcerpt && (
+        <>
+          <div className="text-xs text-text-muted mb-2">{t('recovery_stderr')}</div>
+          <div className="mb-3">
+            <CommandPreview command={stderrExcerpt} className="text-rose-100" />
+          </div>
+        </>
+      )}
+      <div className="text-xs text-text-muted mb-2">{t('recovery_prompt')}</div>
+      <textarea
+        value={repairCommand}
+        onChange={(e) => onRepairCommandChange(e.target.value)}
+        rows={5}
+        className="w-full rounded-md bg-surface-raised/80 border border-border-subtle p-2 text-xs font-mono text-text-primary resize-y"
+        placeholder={t('recovery_input_placeholder')}
+      />
+      <div className="mt-3 flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={onSendRetry}
+          disabled={repairActionLoading !== null || !repairCommand.trim()}
+          className="px-3 py-1.5 rounded-lg bg-emerald-700/70 hover:bg-emerald-600/70 text-xs text-white disabled:opacity-50"
+        >
+          {repairActionLoading === 'modify_params' ? '…' : t('recovery_send_retry')}
+        </button>
+        <button
+          type="button"
+          onClick={onRetryOriginal}
+          disabled={repairActionLoading !== null}
+          className="px-3 py-1.5 rounded-lg bg-surface-overlay hover:bg-surface-hover text-xs text-text-primary disabled:opacity-50"
+        >
+          {repairActionLoading === 'retry_original' ? '…' : t('recovery_retry_original')}
+        </button>
+        <button
+          type="button"
+          onClick={onCancelJob}
+          disabled={repairActionLoading !== null}
+          className="px-3 py-1.5 rounded-lg bg-red-700/70 hover:bg-red-600/70 text-xs text-white disabled:opacity-50"
+        >
+          {repairActionLoading === 'cancel_job' ? '…' : t('recovery_stop_job')}
+        </button>
+      </div>
+      {actionRow && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {actionRow}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function JobCard({
   job,
   autoExpand,
@@ -1232,94 +1400,31 @@ function JobCard({
                 </div>
               )}
               {pendingInteractionType === 'authorization' && pendingInteraction?.command && (
-                <div className="mb-4 rounded-lg border border-sky-500/20 bg-sky-500/8 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-300 mb-2">
-                    {t('status_waiting_for_authorization')}
-                  </div>
-                  <div className="text-xs text-text-muted mb-2">
-                    {pendingInteraction.command_type || pendingInteraction.step_key || 'command'}
-                  </div>
-                  <div className="rounded-md bg-surface-raised/80 border border-border-subtle p-2 text-xs font-mono text-text-primary whitespace-pre-wrap break-all">
-                    {pendingInteraction.command}
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => resolveAuthorization('approved')}
-                      disabled={authActionLoading !== null}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-700/70 hover:bg-emerald-600/70 text-xs text-white disabled:opacity-50"
-                    >
-                      {authActionLoading === 'approved' ? '…' : t('auth_authorize')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => resolveAuthorization('rejected')}
-                      disabled={authActionLoading !== null}
-                      className="px-3 py-1.5 rounded-lg bg-red-700/70 hover:bg-red-600/70 text-xs text-white disabled:opacity-50"
-                    >
-                      {authActionLoading === 'rejected' ? '…' : t('auth_reject')}
-                    </button>
-                  </div>
+                <div className="mb-4">
+                  <AuthorizationPromptCard
+                    title={t('status_waiting_for_authorization')}
+                    subtitle={pendingInteraction.command_type || pendingInteraction.step_key || 'command'}
+                    command={pendingInteraction.command}
+                    onAuthorize={() => resolveAuthorization('approved')}
+                    onReject={() => resolveAuthorization('rejected')}
+                    authActionLoading={authActionLoading}
+                  />
                 </div>
               )}
               {pendingInteractionType === 'repair' && pendingInteraction?.repair_request_id && (
-                <div className="mb-4 rounded-lg border border-rose-500/20 bg-rose-500/8 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-rose-300 mb-2">
-                    {t('status_waiting_for_repair')}
-                  </div>
-                  {pendingInteraction.step_key && (
-                    <div className="text-xs text-text-muted mb-2">{pendingInteraction.step_key}</div>
-                  )}
-                  {pendingInteraction.failed_command && (
-                    <>
-                      <div className="text-xs text-text-muted mb-2">{t('recovery_failing_command')}</div>
-                      <div className="rounded-md bg-surface-raised/80 border border-border-subtle p-2 text-xs font-mono text-text-primary whitespace-pre-wrap break-all mb-3">
-                        {pendingInteraction.failed_command}
-                      </div>
-                    </>
-                  )}
-                  {pendingInteraction.stderr_excerpt && (
-                    <>
-                      <div className="text-xs text-text-muted mb-2">{t('recovery_stderr')}</div>
-                      <div className="rounded-md bg-surface-raised/80 border border-border-subtle p-2 text-xs font-mono text-rose-100 whitespace-pre-wrap break-all mb-3">
-                        {pendingInteraction.stderr_excerpt}
-                      </div>
-                    </>
-                  )}
-                  <div className="text-xs text-text-muted mb-2">{t('recovery_prompt')}</div>
-                  <textarea
-                    value={repairCommand}
-                    onChange={(e) => setRepairCommand(e.target.value)}
-                    rows={5}
-                    className="w-full rounded-md bg-surface-raised/80 border border-border-subtle p-2 text-xs font-mono text-text-primary resize-y"
-                    placeholder={t('recovery_input_placeholder')}
+                <div className="mb-4">
+                  <RepairPromptCard
+                    title={t('status_waiting_for_repair')}
+                    subtitle={pendingInteraction.step_key}
+                    failedCommand={pendingInteraction.failed_command}
+                    stderrExcerpt={pendingInteraction.stderr_excerpt}
+                    repairCommand={repairCommand}
+                    onRepairCommandChange={setRepairCommand}
+                    onSendRetry={() => resolveRepair('modify_params')}
+                    onRetryOriginal={() => resolveRepair('retry_original')}
+                    onCancelJob={() => resolveRepair('cancel_job')}
+                    repairActionLoading={repairActionLoading}
                   />
-                  <div className="mt-3 flex gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => resolveRepair('modify_params')}
-                      disabled={repairActionLoading !== null || !repairCommand.trim()}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-700/70 hover:bg-emerald-600/70 text-xs text-white disabled:opacity-50"
-                    >
-                      {repairActionLoading === 'modify_params' ? '…' : t('recovery_send_retry')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => resolveRepair('retry_original')}
-                      disabled={repairActionLoading !== null}
-                      className="px-3 py-1.5 rounded-lg bg-surface-overlay hover:bg-surface-hover text-xs text-text-primary disabled:opacity-50"
-                    >
-                      {repairActionLoading === 'retry_original' ? '…' : t('recovery_retry_original')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => resolveRepair('cancel_job')}
-                      disabled={repairActionLoading !== null}
-                      className="px-3 py-1.5 rounded-lg bg-red-700/70 hover:bg-red-600/70 text-xs text-white disabled:opacity-50"
-                    >
-                      {repairActionLoading === 'cancel_job' ? '…' : t('recovery_stop_job')}
-                    </button>
-                  </div>
                 </div>
               )}
               <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
@@ -1421,6 +1526,7 @@ export default function TaskMonitor({
 }: Props) {
   const { t, lang } = useLanguage()
   const {
+    jobs: recentJobs,
     getJobsPage,
     getPageHasMore,
     incidents,
@@ -1429,6 +1535,7 @@ export default function TaskMonitor({
     patchJob,
     refreshJobPage,
     refreshJobs,
+    refreshAll,
     eventVersion,
     totalCount,
     refreshIncidents,
@@ -1440,9 +1547,28 @@ export default function TaskMonitor({
   const [page, setPage] = useState(1)
   const [jobsLoading, setJobsLoading] = useState(false)
   const [detailRefreshNonce, setDetailRefreshNonce] = useState(0)
+  const [authorizationSnapshots, setAuthorizationSnapshots] = useState<Record<string, PendingInteractionPayload>>({})
+  const [authorizationSnapshotLoading, setAuthorizationSnapshotLoading] = useState<Record<string, boolean>>({})
+  const [authorizationActionLoading, setAuthorizationActionLoading] = useState<Record<string, string | null>>({})
+  const [repairSnapshots, setRepairSnapshots] = useState<Record<string, PendingInteractionPayload>>({})
+  const [repairSnapshotLoading, setRepairSnapshotLoading] = useState<Record<string, boolean>>({})
+  const [repairActionLoadingByJob, setRepairActionLoadingByJob] = useState<Record<string, string | null>>({})
+  const [repairDrafts, setRepairDrafts] = useState<Record<string, string>>({})
   const listRef = useRef<HTMLDivElement>(null)
   const projectEventRefreshTimerRef = useRef<number | null>(null)
   const jobs = getJobsPage(page) as Job[]
+  const pendingAuthorizationJobs = useMemo(
+    () => recentJobs.filter((job) => (
+      job.status === 'waiting_for_authorization' || job.pending_interaction_type === 'authorization'
+    )),
+    [recentJobs],
+  )
+  const pendingRepairJobs = useMemo(
+    () => recentJobs.filter((job) => (
+      job.status === 'waiting_for_repair' || job.pending_interaction_type === 'repair'
+    )),
+    [recentJobs],
+  )
 
   const loadJobsPage = useCallback((pageNumber: number, options?: { force?: boolean }) => {
     setJobsLoading(true)
@@ -1554,6 +1680,129 @@ export default function TaskMonitor({
       .finally(() => setConfirmDelete(null))
   }
 
+  const loadAuthorizationSnapshot = useCallback((jobId: string) => {
+    setAuthorizationSnapshotLoading((prev) => ({ ...prev, [jobId]: true }))
+    return fetch(`/api/jobs/${jobId}/bindings?detailed=1`)
+      .then((r) => r.json())
+      .then((data: JobBindingResponse) => {
+        if (data.pending_interaction_type === 'authorization' && data.pending_interaction_payload?.command) {
+          setAuthorizationSnapshots((prev) => ({
+            ...prev,
+            [jobId]: data.pending_interaction_payload ?? {},
+          }))
+        } else {
+          setAuthorizationSnapshots((prev) => {
+            const next = { ...prev }
+            delete next[jobId]
+            return next
+          })
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setAuthorizationSnapshotLoading((prev) => ({ ...prev, [jobId]: false }))
+      })
+  }, [])
+
+  useEffect(() => {
+    pendingAuthorizationJobs.forEach((job) => {
+      if (!authorizationSnapshots[job.id] && !authorizationSnapshotLoading[job.id]) {
+        void loadAuthorizationSnapshot(job.id)
+      }
+    })
+  }, [authorizationSnapshotLoading, authorizationSnapshots, loadAuthorizationSnapshot, pendingAuthorizationJobs])
+
+  const loadRepairSnapshot = useCallback((jobId: string) => {
+    setRepairSnapshotLoading((prev) => ({ ...prev, [jobId]: true }))
+    return fetch(`/api/jobs/${jobId}/bindings?detailed=1`)
+      .then((r) => r.json())
+      .then((data: JobBindingResponse) => {
+        if (data.pending_interaction_type === 'repair' && data.pending_interaction_payload?.repair_request_id) {
+          setRepairSnapshots((prev) => ({
+            ...prev,
+            [jobId]: data.pending_interaction_payload ?? {},
+          }))
+          setRepairDrafts((prev) => ({
+            ...prev,
+            [jobId]: prev[jobId] ?? (data.pending_interaction_payload?.failed_command ?? ''),
+          }))
+        } else {
+          setRepairSnapshots((prev) => {
+            const next = { ...prev }
+            delete next[jobId]
+            return next
+          })
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setRepairSnapshotLoading((prev) => ({ ...prev, [jobId]: false }))
+      })
+  }, [])
+
+  useEffect(() => {
+    pendingRepairJobs.forEach((job) => {
+      if (!repairSnapshots[job.id] && !repairSnapshotLoading[job.id]) {
+        void loadRepairSnapshot(job.id)
+      }
+    })
+  }, [loadRepairSnapshot, pendingRepairJobs, repairSnapshotLoading, repairSnapshots])
+
+  const resolveAuthorizationFromQueue = useCallback((jobId: string, authRequestId: string, action: 'approved' | 'rejected') => {
+    setAuthorizationActionLoading((prev) => ({ ...prev, [jobId]: action }))
+    return fetch(`/api/jobs/${jobId}/authorization-requests/${authRequestId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.detail ?? action)
+        }
+        await Promise.all([
+          refreshAll(),
+          loadJobsPage(page, { force: true }),
+        ])
+        setDetailRefreshNonce((prev) => prev + 1)
+      })
+      .catch(() => {})
+      .finally(() => {
+        setAuthorizationActionLoading((prev) => ({ ...prev, [jobId]: null }))
+      })
+  }, [loadJobsPage, page, refreshAll])
+
+  const resolveRepairFromQueue = useCallback((
+    jobId: string,
+    repairRequestId: string,
+    choice: 'retry_original' | 'modify_params' | 'cancel_job',
+  ) => {
+    setRepairActionLoadingByJob((prev) => ({ ...prev, [jobId]: choice }))
+    return fetch(`/api/jobs/${jobId}/repair-requests/${repairRequestId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        choice,
+        params: choice === 'modify_params' ? { command: repairDrafts[jobId] ?? '' } : undefined,
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.detail ?? choice)
+        }
+        await Promise.all([
+          refreshAll(),
+          loadJobsPage(page, { force: true }),
+        ])
+        setDetailRefreshNonce((prev) => prev + 1)
+      })
+      .catch(() => {})
+      .finally(() => {
+        setRepairActionLoadingByJob((prev) => ({ ...prev, [jobId]: null }))
+      })
+  }, [loadJobsPage, page, refreshAll, repairDrafts])
+
   const executeResume = (job: Job) => {
     fetch(`/api/jobs/${job.id}/resume`, { method: 'POST' })
       .then((r) => r.json())
@@ -1632,6 +1881,176 @@ export default function TaskMonitor({
       </div>
 
       <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-3">
+        {pendingAuthorizationJobs.length > 0 && (
+          <div className="rounded-xl border border-sky-500/20 bg-sky-500/8 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-sky-300">
+                  {t('tasks_pending_authorizations_heading')}
+                </div>
+                <div className="mt-1 text-sm text-text-primary">
+                  {t('tasks_pending_authorizations_summary').replace('{count}', String(pendingAuthorizationJobs.length))}
+                </div>
+                <div className="mt-1 text-xs text-text-muted">
+                  {t('tasks_pending_authorizations_hint')}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 space-y-3">
+              {pendingAuthorizationJobs.map((job) => {
+                const snapshot = authorizationSnapshots[job.id]
+                const authRequestId = snapshot?.auth_request_id
+                return (
+                  <div
+                    key={`pending-auth-${job.id}`}
+                    className="rounded-lg border border-sky-500/10 bg-surface-raised/80 p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-text-primary">{job.name ?? job.id}</span>
+                      <StatusBadge status={job.status} />
+                    </div>
+                    {job.goal && (
+                      <div className="mt-1 text-[11px] text-text-muted break-words">
+                        {job.goal}
+                      </div>
+                    )}
+                    <div className="mt-3">
+                      {snapshot?.command && authRequestId ? (
+                        <AuthorizationPromptCard
+                          title={t('status_waiting_for_authorization')}
+                          subtitle={snapshot.command_type || snapshot.step_key || 'command'}
+                          command={snapshot.command}
+                          onAuthorize={() => {
+                            void resolveAuthorizationFromQueue(job.id, authRequestId, 'approved')
+                          }}
+                          onReject={() => {
+                            void resolveAuthorizationFromQueue(job.id, authRequestId, 'rejected')
+                          }}
+                          authActionLoading={authorizationActionLoading[job.id] ?? null}
+                          actionRow={(
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => focusJob(job.id)}
+                                className="rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-primary transition-colors hover:bg-surface-hover"
+                              >
+                                {t('tasks_supervisor_open_task')}
+                              </button>
+                              {job.thread_id && onOpenThread && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenThread(job.thread_id ?? null, job.id)}
+                                  className="rounded-lg border border-sky-500/25 px-3 py-1.5 text-xs text-sky-100 transition-colors hover:bg-sky-500/10"
+                                >
+                                  {t('tasks_supervisor_open_chat')}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        />
+                      ) : (
+                        <div className="rounded-lg border border-border-subtle/70 bg-surface-base/40 px-3 py-2 text-xs text-text-muted">
+                          {authorizationSnapshotLoading[job.id]
+                            ? t('settings_loading')
+                            : t('tasks_pending_authorizations_loading_command')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        {pendingRepairJobs.length > 0 && (
+          <div className="rounded-xl border border-rose-500/20 bg-rose-500/8 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-rose-300">
+                  {t('tasks_pending_repairs_heading')}
+                </div>
+                <div className="mt-1 text-sm text-text-primary">
+                  {t('tasks_pending_repairs_summary').replace('{count}', String(pendingRepairJobs.length))}
+                </div>
+                <div className="mt-1 text-xs text-text-muted">
+                  {t('tasks_pending_repairs_hint')}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 space-y-3">
+              {pendingRepairJobs.map((job) => {
+                const snapshot = repairSnapshots[job.id]
+                const repairRequestId = snapshot?.repair_request_id
+                return (
+                  <div
+                    key={`pending-repair-${job.id}`}
+                    className="rounded-lg border border-rose-500/10 bg-surface-raised/80 p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-text-primary">{job.name ?? job.id}</span>
+                      <StatusBadge status={job.status} />
+                    </div>
+                    {job.goal && (
+                      <div className="mt-1 text-[11px] text-text-muted break-words">
+                        {job.goal}
+                      </div>
+                    )}
+                    <div className="mt-3">
+                      {repairRequestId ? (
+                        <RepairPromptCard
+                          title={t('status_waiting_for_repair')}
+                          subtitle={snapshot?.step_key}
+                          failedCommand={snapshot?.failed_command}
+                          stderrExcerpt={snapshot?.stderr_excerpt}
+                          repairCommand={repairDrafts[job.id] ?? ''}
+                          onRepairCommandChange={(value) => {
+                            setRepairDrafts((prev) => ({ ...prev, [job.id]: value }))
+                          }}
+                          onSendRetry={() => {
+                            void resolveRepairFromQueue(job.id, repairRequestId, 'modify_params')
+                          }}
+                          onRetryOriginal={() => {
+                            void resolveRepairFromQueue(job.id, repairRequestId, 'retry_original')
+                          }}
+                          onCancelJob={() => {
+                            void resolveRepairFromQueue(job.id, repairRequestId, 'cancel_job')
+                          }}
+                          repairActionLoading={repairActionLoadingByJob[job.id] ?? null}
+                          actionRow={(
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => focusJob(job.id)}
+                                className="rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-primary transition-colors hover:bg-surface-hover"
+                              >
+                                {t('tasks_supervisor_open_task')}
+                              </button>
+                              {job.thread_id && onOpenThread && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenThread(job.thread_id ?? null, job.id)}
+                                  className="rounded-lg border border-rose-500/25 px-3 py-1.5 text-xs text-rose-100 transition-colors hover:bg-rose-500/10"
+                                >
+                                  {t('tasks_supervisor_open_chat')}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        />
+                      ) : (
+                        <div className="rounded-lg border border-border-subtle/70 bg-surface-base/40 px-3 py-2 text-xs text-text-muted">
+                          {repairSnapshotLoading[job.id]
+                            ? t('settings_loading')
+                            : t('tasks_pending_repairs_loading_payload')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {incidentSummary && incidentSummary.total_open > 0 && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 p-4">
             <div className="flex flex-wrap items-center gap-2 justify-between">

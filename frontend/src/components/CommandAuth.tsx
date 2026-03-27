@@ -13,9 +13,12 @@ export default function CommandAuth({ command, onAuthorize, onReject }: Props) {
       <p className="text-yellow-300 text-xs font-semibold mb-2">
         {t('auth_heading')}
       </p>
-      <pre className="bg-gray-900 rounded p-3 text-xs text-green-300 overflow-x-auto mb-3 whitespace-pre-wrap">
+      <div
+        className="bg-gray-900 rounded p-3 text-xs text-green-300 mb-3 font-mono whitespace-pre"
+        style={{ maxHeight: 224, overflowY: 'auto', overflowX: 'auto' }}
+      >
         {command}
-      </pre>
+      </div>
       <p className="text-gray-400 text-xs mb-3 whitespace-pre-wrap">
         {t('auth_notice')}
       </p>

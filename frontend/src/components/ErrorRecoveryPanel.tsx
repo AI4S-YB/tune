@@ -41,14 +41,20 @@ export default function ErrorRecoveryPanel({
       </p>
 
       <p className="text-gray-400 text-xs mb-1 font-medium">{t('recovery_failing_command')}</p>
-      <pre className="bg-gray-900 rounded p-2 text-xs text-green-300 overflow-x-auto mb-3 whitespace-pre-wrap">
+      <div
+        className="bg-gray-900 rounded p-2 text-xs text-green-300 mb-3 font-mono whitespace-pre"
+        style={{ maxHeight: 224, overflowY: 'auto', overflowX: 'auto' }}
+      >
         {command}
-      </pre>
+      </div>
 
       <p className="text-gray-400 text-xs mb-1 font-medium">{t('recovery_stderr')}</p>
-      <pre className="bg-gray-900 rounded p-2 text-xs text-red-300 overflow-x-auto mb-3 whitespace-pre-wrap max-h-32">
+      <div
+        className="bg-gray-900 rounded p-2 text-xs text-red-300 mb-3 font-mono whitespace-pre"
+        style={{ maxHeight: 224, overflowY: 'auto', overflowX: 'auto' }}
+      >
         {stderr}
-      </pre>
+      </div>
 
       {attemptHistory.length > 0 && (
         <>

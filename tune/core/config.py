@@ -61,6 +61,7 @@ class TuneConfig(BaseModel):
     analysis_dir: Path
     llm_configs: list[ApiConfig] = []
     active_llm_config_id: Optional[str] = None
+    auto_authorize_commands: bool = False
     database_url: str = "postgresql+psycopg://tune:tune@localhost:5432/tune"
     pixi_path: str = "pixi"
     host: str = "0.0.0.0"

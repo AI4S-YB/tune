@@ -22,6 +22,7 @@ async def get_config_endpoint():
         "host": cfg.host,
         "port": cfg.port,
         "active_llm_config_id": cfg.active_llm_config_id,
+        "auto_authorize_commands": cfg.auto_authorize_commands,
     }
 
 
@@ -29,6 +30,7 @@ class ConfigUpdate(BaseModel):
     data_dir: str | None = None
     analysis_dir: str | None = None
     pixi_path: str | None = None
+    auto_authorize_commands: bool | None = None
 
 
 @router.put("/")
@@ -60,6 +62,11 @@ async def update_config(body: ConfigUpdate):
         port=cfg.port,
         llm_configs=cfg.llm_configs,
         active_llm_config_id=cfg.active_llm_config_id,
+        auto_authorize_commands=(
+            body.auto_authorize_commands
+            if body.auto_authorize_commands is not None
+            else cfg.auto_authorize_commands
+        ),
     )
 
     errors = validate_config(new_cfg)

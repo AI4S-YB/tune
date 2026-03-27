@@ -1006,6 +1006,16 @@ async def request_authorization(
 
     Already-authorized command types return (command, True) immediately without blocking.
     """
+    from tune.core.config import get_config
+
+    try:
+        if get_config().auto_authorize_commands:
+            if command_type:
+                _authorized_types.setdefault(job_id, set()).add(command_type)
+            return command, True
+    except RuntimeError:
+        pass
+
     if command_type in _authorized_types.get(job_id, set()):
         return command, True
 

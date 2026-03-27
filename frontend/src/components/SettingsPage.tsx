@@ -9,6 +9,7 @@ interface Config {
   analysis_dir: string
   pixi_path: string
   active_llm_config_id: string | null
+  auto_authorize_commands: boolean
 }
 
 interface UserProfile {
@@ -90,9 +91,11 @@ export default function SettingsPage() {
   const [analysisDir, setAnalysisDir] = useState('')
   const [pixiPath, setPixiPath] = useState('')
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null)
+  const [autoAuthorizeCommands, setAutoAuthorizeCommands] = useState(false)
 
   const [workspaceState, setWorkspaceState] = useState<SaveState>('idle')
   const [profileState, setProfileState] = useState<SaveState>('idle')
+  const [executionState, setExecutionState] = useState<SaveState>('idle')
 
   const [profile, setProfile] = useState<UserProfile>({
     research_domain: null, experience_level: null,
@@ -109,6 +112,7 @@ export default function SettingsPage() {
         setAnalysisDir(cfg.analysis_dir)
         setPixiPath(cfg.pixi_path)
         setActiveConfigId(cfg.active_llm_config_id)
+        setAutoAuthorizeCommands(Boolean(cfg.auto_authorize_commands))
       })
       .catch(() => {})
 
@@ -151,6 +155,26 @@ export default function SettingsPage() {
     }).catch(() => {})
     setProfileState('saved')
     setTimeout(() => setProfileState('idle'), 2000)
+  }
+
+  const saveExecution = async () => {
+    setExecutionState('saving')
+    try {
+      const res = await fetch('/api/config/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_authorize_commands: autoAuthorizeCommands }),
+      }).then((r) => r.json())
+      if (res.ok) {
+        setExecutionState('saved')
+        setConfig((prev) => (prev ? { ...prev, auto_authorize_commands: autoAuthorizeCommands } : prev))
+        setTimeout(() => setExecutionState('idle'), 2000)
+      } else {
+        setExecutionState('error')
+      }
+    } catch {
+      setExecutionState('error')
+    }
   }
 
   const saveDiagnostics = async () => {
@@ -251,6 +275,30 @@ export default function SettingsPage() {
             className={`${inputCls} resize-none`}
           />
         </FieldRow>
+      </SettingSection>
+
+      <SettingSection
+        title={t('settings_execution')}
+        description={t('settings_execution_desc')}
+        saveState={executionState}
+        onSave={saveExecution}
+      >
+        <label className="flex items-start gap-3 rounded-lg border border-border-subtle bg-surface-overlay px-4 py-3">
+          <input
+            type="checkbox"
+            checked={autoAuthorizeCommands}
+            onChange={(e) => setAutoAuthorizeCommands(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-border-subtle bg-surface-base text-accent focus:ring-accent"
+          />
+          <div>
+            <div className="text-sm font-medium text-text-primary">
+              {t('settings_auto_authorize_commands')}
+            </div>
+            <div className="mt-1 text-xs text-text-muted">
+              {t('settings_auto_authorize_commands_hint')}
+            </div>
+          </div>
+        </label>
       </SettingSection>
 
       {/* Diagnostics */}

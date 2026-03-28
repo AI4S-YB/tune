@@ -15,8 +15,8 @@ Behavior:
   - Restarts backend with --reload and frontend with Vite hot reload.
 
 Examples:
-  bash scripts/dev.sh --workspace-root analysis
-  bash scripts/dev.sh --analysis-dir analysis/workspace
+  bash scripts/dev.sh --workspace-root workspace
+  bash scripts/dev.sh --analysis-dir workspace/analysis
   bash scripts/dev.sh
 EOF
 }

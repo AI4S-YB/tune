@@ -82,17 +82,20 @@ class TuneConfig(BaseModel):
         if str(self.analysis_dir).startswith(str(self.data_dir) + os.sep):
             raise ValueError("analysis_dir must not be inside data_dir")
         inferred_root = self.workspace_root
-        if inferred_root is None and self.data_dir.parent == self.analysis_dir.parent:
-            expected_data, expected_analysis = derive_workspace_dirs(self.data_dir.parent)
-            if self.data_dir == expected_data and self.analysis_dir == expected_analysis:
-                inferred_root = self.data_dir.parent
+        if inferred_root is None:
+            inferred_root = infer_workspace_root(self.data_dir, self.analysis_dir)
 
         if inferred_root is not None:
             expected_data, expected_analysis = derive_workspace_dirs(inferred_root)
-            if self.data_dir != expected_data or self.analysis_dir != expected_analysis:
+            legacy_data, legacy_analysis = derive_legacy_workspace_dirs(inferred_root)
+            if (self.data_dir, self.analysis_dir) not in {
+                (expected_data, expected_analysis),
+                (legacy_data, legacy_analysis),
+            }:
                 raise ValueError(
-                    "workspace_root requires data_dir=<workspace_root>/data and "
-                    "analysis_dir=<workspace_root>/workspace"
+                    "workspace_root requires either "
+                    "data_dir=<workspace_root>/data and analysis_dir=<workspace_root>/analysis "
+                    "or the legacy layout data_dir=<workspace_root>/data and analysis_dir=<workspace_root>/workspace"
                 )
             self.workspace_root = inferred_root
         return self
@@ -159,7 +162,23 @@ def _migrate_legacy_llm_config(data: dict) -> dict:
 
 def derive_workspace_dirs(workspace_root: Path) -> tuple[Path, Path]:
     root = Path(workspace_root).expanduser().resolve()
+    return root / "data", root / "analysis"
+
+
+def derive_legacy_workspace_dirs(workspace_root: Path) -> tuple[Path, Path]:
+    root = Path(workspace_root).expanduser().resolve()
     return root / "data", root / "workspace"
+
+
+def infer_workspace_root(data_dir: Path, analysis_dir: Path) -> Path | None:
+    if data_dir.parent != analysis_dir.parent:
+        return None
+    parent = data_dir.parent
+    current_expected = derive_workspace_dirs(parent)
+    legacy_expected = derive_legacy_workspace_dirs(parent)
+    if (data_dir, analysis_dir) in {current_expected, legacy_expected}:
+        return parent
+    return None
 
 
 def _config_path(config_root: Path) -> Path:
@@ -172,10 +191,16 @@ def _resolve_config_path(path: Path) -> Path:
     if direct.exists():
         return direct
 
-    legacy_workspace = resolved / "workspace"
-    legacy = _config_path(legacy_workspace)
-    if legacy.exists():
-        return legacy
+    for child_name in ("analysis", "workspace"):
+        child = resolved / child_name
+        candidate = _config_path(child)
+        if candidate.exists():
+            return candidate
+
+    if resolved.name in {"analysis", "workspace"}:
+        parent_candidate = _config_path(resolved.parent)
+        if parent_candidate.exists():
+            return parent_candidate
 
     return direct
 

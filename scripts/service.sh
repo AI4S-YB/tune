@@ -21,15 +21,15 @@ Usage:
   bash scripts/service.sh <start|stop|restart|status> [all|backend|frontend] [options]
 
 Examples:
-  bash scripts/service.sh start --workspace-root analysis
-  bash scripts/service.sh start --analysis-dir analysis/workspace
+  bash scripts/service.sh start --workspace-root workspace
+  bash scripts/service.sh start --analysis-dir workspace/analysis
   bash scripts/service.sh restart
   bash scripts/service.sh stop frontend
   bash scripts/service.sh status
 
 Options:
-  --workspace-root PATH Workspace root containing data/, workspace/, and .tune/config.yaml
-  --analysis-dir PATH   Legacy config path; also accepts the workspace root for compatibility.
+  --workspace-root PATH Workspace root containing data/, analysis/, and .tune/config.yaml
+  --analysis-dir PATH   Legacy config path; also accepts workspace/analysis, analysis/workspace, or the workspace root.
   --host HOST           Host for backend and frontend. Default: 0.0.0.0
   --backend-port PORT   Backend port. Default: 8000
   --frontend-port PORT  Frontend port. Default: 5173
@@ -110,6 +110,7 @@ port_for_component() {
 }
 
 load_config() {
+  local cli_workspace_root="${WORKSPACE_ROOT:-}"
   local cli_analysis_dir="${ANALYSIS_DIR:-}"
   local cli_host="${HOST:-}"
   local cli_backend_port="${BACKEND_PORT:-}"
@@ -121,8 +122,13 @@ load_config() {
     source "$CONFIG_FILE"
   fi
 
+  if [[ -n "$cli_workspace_root" ]]; then
+    WORKSPACE_ROOT="$cli_workspace_root"
+    ANALYSIS_DIR=""
+  fi
   if [[ -n "$cli_analysis_dir" ]]; then
     ANALYSIS_DIR="$cli_analysis_dir"
+    WORKSPACE_ROOT=""
   fi
   if [[ -n "$cli_host" ]]; then
     HOST="$cli_host"
@@ -141,6 +147,7 @@ load_config() {
   BACKEND_PORT="${BACKEND_PORT:-$DEFAULT_BACKEND_PORT}"
   FRONTEND_PORT="${FRONTEND_PORT:-$DEFAULT_FRONTEND_PORT}"
   RELOAD="${RELOAD:-$DEFAULT_RELOAD}"
+  WORKSPACE_ROOT="${WORKSPACE_ROOT:-}"
   ANALYSIS_DIR="${ANALYSIS_DIR:-}"
 }
 
@@ -153,12 +160,24 @@ require_screen() {
 
 save_config() {
   cat > "$CONFIG_FILE" <<EOF
-ANALYSIS_DIR=$(printf '%q' "$ANALYSIS_DIR")
+WORKSPACE_ROOT=$(printf '%q' "$WORKSPACE_ROOT")
 HOST=$(printf '%q' "$HOST")
 BACKEND_PORT=$(printf '%q' "$BACKEND_PORT")
 FRONTEND_PORT=$(printf '%q' "$FRONTEND_PORT")
 RELOAD=$(printf '%q' "$RELOAD")
 EOF
+}
+
+resolve_workspace_root() {
+  local raw="$1"
+  if [[ -z "$raw" ]]; then
+    return 0
+  fi
+  if [[ ! -d "$raw" ]]; then
+    echo "Workspace root does not exist: $raw" >&2
+    exit 1
+  fi
+  WORKSPACE_ROOT="$(cd "$raw" && pwd)"
 }
 
 resolve_analysis_dir() {
@@ -173,8 +192,8 @@ resolve_analysis_dir() {
   ANALYSIS_DIR="$(cd "$raw" && pwd)"
 }
 
-resolved_workspace_root() {
-  local candidate="${ANALYSIS_DIR:-}"
+derive_workspace_root_from_candidate() {
+  local candidate="$1"
   [[ -n "$candidate" ]] || return 0
 
   if [[ -f "$candidate/.tune/config.yaml" ]]; then
@@ -182,12 +201,15 @@ resolved_workspace_root() {
     return 0
   fi
 
-  if [[ -f "$candidate/workspace/.tune/config.yaml" ]]; then
-    echo "$candidate"
-    return 0
-  fi
+  local child
+  for child in analysis workspace; do
+    if [[ -f "$candidate/$child/.tune/config.yaml" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
 
-  if [[ "$(basename "$candidate")" == "workspace" ]]; then
+  if [[ "$(basename "$candidate")" == "analysis" || "$(basename "$candidate")" == "workspace" ]]; then
     local parent
     parent="$(cd "$(dirname "$candidate")" && pwd)"
     if [[ -f "$candidate/.tune/config.yaml" || -f "$parent/.tune/config.yaml" ]]; then
@@ -195,6 +217,20 @@ resolved_workspace_root() {
       return 0
     fi
   fi
+
+  return 0
+}
+
+resolved_workspace_root() {
+  local candidate root
+  for candidate in "${WORKSPACE_ROOT:-}" "${ANALYSIS_DIR:-}"; do
+    [[ -n "$candidate" ]] || continue
+    root="$(derive_workspace_root_from_candidate "$candidate")"
+    if [[ -n "$root" ]]; then
+      echo "$root"
+      return 0
+    fi
+  done
 }
 
 resolved_data_dir() {
@@ -210,7 +246,11 @@ resolved_runtime_analysis_dir() {
   local root
   root="$(resolved_workspace_root)"
   if [[ -n "$root" ]]; then
-    echo "$root/workspace"
+    if [[ -d "$root/analysis" || ! -d "$root/workspace" ]]; then
+      echo "$root/analysis"
+    else
+      echo "$root/workspace"
+    fi
     return 0
   fi
   if [[ -n "${ANALYSIS_DIR:-}" ]]; then
@@ -245,7 +285,7 @@ component_selected() {
 }
 
 require_backend_analysis_dir() {
-  if [[ -z "$ANALYSIS_DIR" ]]; then
+  if [[ -z "$WORKSPACE_ROOT" && -z "$ANALYSIS_DIR" ]]; then
     echo "Backend start requires --workspace-root/--analysis-dir, or a previously saved value in .run/service.env." >&2
     exit 1
   fi
@@ -712,6 +752,7 @@ if [[ $# -gt 0 ]]; then
   esac
 fi
 
+WORKSPACE_ROOT=""
 ANALYSIS_DIR=""
 HOST=""
 BACKEND_PORT=""
@@ -722,7 +763,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --workspace-root)
       [[ $# -ge 2 ]] || { echo "Missing value for --workspace-root" >&2; exit 1; }
-      ANALYSIS_DIR="$2"
+      WORKSPACE_ROOT="$2"
       shift 2
       ;;
     --analysis-dir)
@@ -766,6 +807,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 load_config
+resolve_workspace_root "$WORKSPACE_ROOT"
 resolve_analysis_dir "$ANALYSIS_DIR"
 
 case "$COMMAND" in

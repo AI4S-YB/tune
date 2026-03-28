@@ -233,7 +233,7 @@ export default function SettingsPage() {
             onChange={(path) => {
               setWorkspaceRoot(path)
               setDataDir(joinWorkspacePath(path, 'data'))
-              setAnalysisDir(joinWorkspacePath(path, 'workspace'))
+              setAnalysisDir(joinWorkspacePath(path, 'analysis'))
             }}
           />
         </FieldRow>
@@ -244,7 +244,7 @@ export default function SettingsPage() {
           <div className="mt-2 space-y-1 text-xs font-mono text-text-primary break-all">
             <div>{workspaceRoot || '…'}/.tune</div>
             <div>{workspaceRoot || '…'}/data</div>
-            <div>{workspaceRoot || '…'}/workspace</div>
+            <div>{workspaceRoot || '…'}/analysis</div>
           </div>
           <div className="mt-2 text-xs text-text-muted">
             {t('settings_workspace_layout_hint')}

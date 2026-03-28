@@ -1,5 +1,6 @@
 # Local analysis data and runtime state
 analysis/
+workspace/
 .run/
 
 # Internal planning / local assistant context

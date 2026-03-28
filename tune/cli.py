@@ -34,8 +34,8 @@ def init():
 
     # --- directories ---
     workspace_root = Prompt.ask(
-        "Path to your [bold]workspace root[/bold] (Tune will use data/ and workspace/ under this directory)",
-        default=str((Path.cwd() / "analysis").resolve()),
+        "Path to your [bold]workspace root[/bold] (Tune will use data/ and analysis/ under this directory)",
+        default=str((Path.cwd() / "workspace").resolve()),
     )
 
     # --- database ---
@@ -147,7 +147,7 @@ def init():
 
 @cli.command("sync-resource-entities")
 @click.option("--workspace-root", default=None, help="Workspace root containing .tune/config.yaml")
-@click.option("--analysis-dir", default=None, help="Legacy config path (analysis/workspace or workspace root)")
+@click.option("--analysis-dir", default=None, help="Legacy config path (workspace/analysis, analysis/workspace, or workspace root)")
 @click.option("--project-id", default=None, help="Sync only one project")
 def sync_resource_entities(workspace_root: str | None, analysis_dir: str | None, project_id: str | None):
     """Backfill / reconcile resource entities for one project or all projects."""
@@ -202,7 +202,7 @@ def sync_resource_entities(workspace_root: str | None, analysis_dir: str | None,
 
 @cli.command()
 @click.option("--workspace-root", default=None, help="Workspace root containing .tune/config.yaml")
-@click.option("--analysis-dir", default=None, help="Legacy config path (analysis/workspace or workspace root)")
+@click.option("--analysis-dir", default=None, help="Legacy config path (workspace/analysis, analysis/workspace, or workspace root)")
 @click.option("--host", default="0.0.0.0", help="Bind host")
 @click.option("--port", default=8000, type=int, help="Bind port")
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (development)")

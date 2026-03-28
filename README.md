@@ -76,14 +76,14 @@ tune init
 
 初始化时需要配置：
 
-- 工作区根目录：Tune 会自动使用该目录下的 `data/`、`workspace/` 和 `.tune/`
+- 工作区根目录：Tune 会自动使用该目录下的 `data/`、`analysis/` 和 `.tune/`
 - 主模型：OpenAI 或 Anthropic
 - 备用模型：可选，用于提高可用性
 
 ## 启动服务
 
 ```bash
-tune start --workspace-root /path/to/analysis
+tune start --workspace-root /path/to/workspace
 ```
 
 浏览器打开：
@@ -95,7 +95,7 @@ http://localhost:8000
 如果是本地开发，推荐使用项目自带脚本：
 
 ```bash
-bash scripts/service.sh start --workspace-root analysis
+bash scripts/service.sh start --workspace-root workspace
 bash scripts/service.sh status
 bash scripts/service.sh restart
 bash scripts/service.sh stop
@@ -104,14 +104,14 @@ bash scripts/service.sh stop
 开发模式：
 
 ```bash
-bash scripts/dev.sh --workspace-root analysis
+bash scripts/dev.sh --workspace-root workspace
 ```
 
 兼容说明：
 
 - 旧参数 `--analysis-dir` 仍然可用
-- `analysis/workspace` 和 `analysis` 根目录都能被兼容解析
-- 当前推荐统一使用 `--workspace-root analysis`
+- `workspace/analysis`、`analysis/workspace` 和工作区根目录都能被兼容解析
+- 当前推荐统一使用 `--workspace-root workspace`
 
 ## 基本使用流程
 
@@ -194,13 +194,13 @@ Tune 当前不是“只把一串命令交给工作流执行”的系统。
 推荐工作区结构：
 
 ```text
-analysis/
+workspace/
   .tune/
     config.yaml
   data/
     proj1/
     proj2/
-  workspace/
+  analysis/
     proj1/
     proj2/
 ```

@@ -497,6 +497,7 @@ wait_for_port_clear() {
 
 start_backend() {
   local pid_file log_file cmd session
+  local workspace_root runtime_analysis_dir
   pid_file="$(pid_file_for backend)"
   log_file="$(log_file_for backend)"
   session="$(screen_session_for backend)"
@@ -515,11 +516,17 @@ start_backend() {
   require_backend_analysis_dir
   require_screen
   cmd="$(backend_command_prefix)"
+  workspace_root="$(resolved_workspace_root)"
+  runtime_analysis_dir="$(resolved_runtime_analysis_dir)"
   : > "$log_file"
   stop_screen_session "$session"
 
   local launch_cmd
-  launch_cmd="$cmd start --analysis-dir $(printf '%q' "$ANALYSIS_DIR") --host $(printf '%q' "$HOST") --port $(printf '%q' "$BACKEND_PORT")"
+  if [[ -n "$workspace_root" ]]; then
+    launch_cmd="$cmd start --workspace-root $(printf '%q' "$workspace_root") --host $(printf '%q' "$HOST") --port $(printf '%q' "$BACKEND_PORT")"
+  else
+    launch_cmd="$cmd start --analysis-dir $(printf '%q' "$ANALYSIS_DIR") --host $(printf '%q' "$HOST") --port $(printf '%q' "$BACKEND_PORT")"
+  fi
   if [[ "$RELOAD" == "1" ]]; then
     launch_cmd+=" --reload"
   fi
@@ -527,6 +534,12 @@ start_backend() {
   local dev_env=""
   if [[ "$RELOAD" == "1" ]]; then
     dev_env="export TUNE_INLINE_TASKS=1; "
+  fi
+  if [[ -n "$workspace_root" ]]; then
+    dev_env+="export TUNE_WORKSPACE_ROOT=$(printf '%q' "$workspace_root"); "
+  fi
+  if [[ -n "$runtime_analysis_dir" ]]; then
+    dev_env+="export TUNE_ANALYSIS_DIR=$(printf '%q' "$runtime_analysis_dir"); "
   fi
 
   screen -dmS "$session" bash -lc "cd $(printf '%q' "$ROOT_DIR") && ${dev_env}exec >>$(printf '%q' "$log_file") 2>&1 && exec $launch_cmd"

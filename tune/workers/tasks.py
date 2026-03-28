@@ -1526,7 +1526,14 @@ async def scan_file_task(path: str) -> None:
 
     is_new = False
     async with get_session_factory()() as session:
-        existing = (await session.execute(select(File).where(File.path == path))).scalar_one_or_none()
+        existing = (
+            await session.execute(
+                select(File)
+                .where(File.path == path)
+                .order_by(File.discovered_at.desc(), File.id.desc())
+                .limit(1)
+            )
+        ).scalars().first()
         if existing:
             existing.size_bytes = meta["size_bytes"]
             existing.mtime = meta["mtime"]
@@ -1534,9 +1541,16 @@ async def scan_file_task(path: str) -> None:
             existing.preview = meta["preview"]
         else:
             is_new = True
-            dup = (
-                await session.execute(select(File).where(File.md5 == meta["md5"]))
-            ).scalar_one_or_none()
+            dup = None
+            if meta["md5"]:
+                dup = (
+                    await session.execute(
+                        select(File)
+                        .where(File.md5 == meta["md5"])
+                        .order_by(File.duplicate_of.is_not(None), File.discovered_at.asc(), File.id.asc())
+                        .limit(1)
+                    )
+                ).scalars().first()
             file_rec = File(
                 id=str(uuid.uuid4()),
                 duplicate_of=dup.id if dup else None,

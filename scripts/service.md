@@ -8,7 +8,5 @@
 
 兼容旧参数：
 
-  - bash scripts/service.sh start --analysis-dir workspace/analysis
-  - bash scripts/dev.sh --analysis-dir workspace/analysis
-  - bash scripts/service.sh start --analysis-dir analysis/workspace
-  - bash scripts/dev.sh --analysis-dir analysis/workspace
+  - `--analysis-dir` 仍可使用，但仅建议用于迁移旧环境
+  - 兼容路径包括 `workspace/analysis`、`analysis/workspace` 和工作区根目录

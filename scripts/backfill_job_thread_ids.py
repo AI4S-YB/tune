@@ -136,9 +136,14 @@ async def _apply_backfill(matches: list[CandidateMatch]) -> int:
 async def _main() -> int:
     parser = argparse.ArgumentParser(description="Backfill analysis_jobs.thread_id conservatively.")
     parser.add_argument(
-        "--analysis-dir",
+        "--workspace-root",
         default="/Users/kentnf/projects/tune/workspace",
-        help="Tune workspace root (or legacy workspace/analysis, analysis/workspace path) containing .tune/config.yaml",
+        help="Tune workspace root containing .tune/config.yaml",
+    )
+    parser.add_argument(
+        "--analysis-dir",
+        default=None,
+        help="Legacy compatibility path (workspace/analysis, analysis/workspace, or workspace root)",
     )
     parser.add_argument(
         "--max-gap-minutes",
@@ -153,7 +158,8 @@ async def _main() -> int:
     )
     args = parser.parse_args()
 
-    cfg = load_config(Path(args.analysis_dir))
+    config_input = args.analysis_dir or args.workspace_root
+    cfg = load_config(Path(config_input))
     set_config(cfg)
 
     matches, skipped = await _select_backfill_matches(max_gap_minutes=args.max_gap_minutes)

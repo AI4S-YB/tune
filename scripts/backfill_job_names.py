@@ -2,7 +2,7 @@
 and rename the corresponding output directories on disk.
 
 Usage:
-    python scripts/backfill_job_names.py --analysis-dir /path/to/workspace [--dry-run]
+    python scripts/backfill_job_names.py --workspace-root /path/to/workspace [--dry-run]
 
 Only jobs whose name does not already match the slug pattern ([a-z0-9][a-z0-9-]{0,39})
 will be updated. The new name is derived from _slugify(goal or name).
@@ -39,13 +39,13 @@ def _new_output_dir(output_dir: str, new_slug: str) -> str | None:
     return str(p.parent / new_name)
 
 
-async def run(analysis_dir: str, dry_run: bool) -> None:
+async def run(config_input: str, dry_run: bool) -> None:
     from tune.core.config import load_config, set_config
     from tune.core.database import get_session_factory
     from sqlalchemy import select
     from tune.core.models import AnalysisJob
 
-    cfg = load_config(Path(analysis_dir))
+    cfg = load_config(Path(config_input))
     set_config(cfg)
 
     async with get_session_factory()() as session:
@@ -108,10 +108,22 @@ async def run(analysis_dir: str, dry_run: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Backfill job names to short slugs")
-    parser.add_argument("--analysis-dir", required=True, help="Path to analysis directory")
+    parser.add_argument(
+        "--workspace-root",
+        required=False,
+        help="Workspace root containing .tune/config.yaml",
+    )
+    parser.add_argument(
+        "--analysis-dir",
+        required=False,
+        help="Legacy compatibility path (workspace/analysis, analysis/workspace, or workspace root)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Show what would change without writing")
     args = parser.parse_args()
-    asyncio.run(run(args.analysis_dir, args.dry_run))
+    config_input = args.workspace_root or args.analysis_dir
+    if not config_input:
+        parser.error("provide --workspace-root or --analysis-dir")
+    asyncio.run(run(config_input, args.dry_run))
 
 
 if __name__ == "__main__":

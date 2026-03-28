@@ -110,7 +110,7 @@ bash scripts/dev.sh --workspace-root workspace
 兼容说明：
 
 - 旧参数 `--analysis-dir` 仍然可用
-- `workspace/analysis`、`analysis/workspace` 和工作区根目录都能被兼容解析
+- `workspace/analysis`、`analysis/workspace` 和工作区根目录都能被兼容解析，但只作为兼容入口保留
 - 当前推荐统一使用 `--workspace-root workspace`
 
 ## 基本使用流程

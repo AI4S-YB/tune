@@ -22,14 +22,13 @@ Usage:
 
 Examples:
   bash scripts/service.sh start --workspace-root workspace
-  bash scripts/service.sh start --analysis-dir workspace/analysis
   bash scripts/service.sh restart
   bash scripts/service.sh stop frontend
   bash scripts/service.sh status
 
 Options:
   --workspace-root PATH Workspace root containing data/, analysis/, and .tune/config.yaml
-  --analysis-dir PATH   Legacy config path; also accepts workspace/analysis, analysis/workspace, or the workspace root.
+  --analysis-dir PATH   Legacy compatibility path; accepts workspace/analysis, analysis/workspace, or the workspace root.
   --host HOST           Host for backend and frontend. Default: 0.0.0.0
   --backend-port PORT   Backend port. Default: 8000
   --frontend-port PORT  Frontend port. Default: 5173
@@ -286,7 +285,7 @@ component_selected() {
 
 require_backend_analysis_dir() {
   if [[ -z "$WORKSPACE_ROOT" && -z "$ANALYSIS_DIR" ]]; then
-    echo "Backend start requires --workspace-root/--analysis-dir, or a previously saved value in .run/service.env." >&2
+    echo "Backend start requires --workspace-root (preferred) or --analysis-dir, or a previously saved value in .run/service.env." >&2
     exit 1
   fi
 }

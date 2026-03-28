@@ -17,7 +17,7 @@ console = Console()
 def _require_config_input(workspace_root: str | None, analysis_dir: str | None) -> Path:
     raw = workspace_root or analysis_dir
     if not raw:
-        console.print("[red]Error:[/red] provide --workspace-root or --analysis-dir.")
+        console.print("[red]Error:[/red] provide --workspace-root (preferred) or --analysis-dir.")
         sys.exit(1)
     return Path(raw).expanduser().resolve()
 
@@ -147,7 +147,11 @@ def init():
 
 @cli.command("sync-resource-entities")
 @click.option("--workspace-root", default=None, help="Workspace root containing .tune/config.yaml")
-@click.option("--analysis-dir", default=None, help="Legacy config path (workspace/analysis, analysis/workspace, or workspace root)")
+@click.option(
+    "--analysis-dir",
+    default=None,
+    help="Legacy config path for compatibility only (workspace/analysis, analysis/workspace, or workspace root). Prefer --workspace-root.",
+)
 @click.option("--project-id", default=None, help="Sync only one project")
 def sync_resource_entities(workspace_root: str | None, analysis_dir: str | None, project_id: str | None):
     """Backfill / reconcile resource entities for one project or all projects."""
@@ -202,7 +206,11 @@ def sync_resource_entities(workspace_root: str | None, analysis_dir: str | None,
 
 @cli.command()
 @click.option("--workspace-root", default=None, help="Workspace root containing .tune/config.yaml")
-@click.option("--analysis-dir", default=None, help="Legacy config path (workspace/analysis, analysis/workspace, or workspace root)")
+@click.option(
+    "--analysis-dir",
+    default=None,
+    help="Legacy config path for compatibility only (workspace/analysis, analysis/workspace, or workspace root). Prefer --workspace-root.",
+)
 @click.option("--host", default="0.0.0.0", help="Bind host")
 @click.option("--port", default=8000, type=int, help="Bind port")
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (development)")
@@ -226,10 +234,12 @@ def start(workspace_root: str | None, analysis_dir: str | None, host: str, port:
 
     set_config(cfg)
 
-    # Export env var so uvicorn --reload child processes can re-load config without CLI
+    # Export env vars so uvicorn --reload child processes can re-load config without CLI.
+    # Keep TUNE_ANALYSIS_DIR as a legacy compatibility variable, but point it at the
+    # actual runtime analysis directory rather than the original CLI argument.
     if cfg.workspace_root:
         os.environ["TUNE_WORKSPACE_ROOT"] = str(cfg.workspace_root)
-    os.environ["TUNE_ANALYSIS_DIR"] = str(cfg_input)
+    os.environ["TUNE_ANALYSIS_DIR"] = str(cfg.analysis_dir)
 
     # Run Alembic migrations
     console.print("[cyan]Applying database migrations…[/cyan]")

@@ -13,10 +13,10 @@ Behavior:
   - Always performs a full development restart.
   - Stops the current backend and frontend first.
   - Restarts backend with --reload and frontend with Vite hot reload.
+  - Prefer --workspace-root; keep --analysis-dir only for compatibility with legacy layouts.
 
 Examples:
   bash scripts/dev.sh --workspace-root workspace
-  bash scripts/dev.sh --analysis-dir workspace/analysis
   bash scripts/dev.sh
 EOF
 }
